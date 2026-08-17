@@ -1,0 +1,30 @@
+# Worker: consumes the BullMQ send queue, sends the DMs, runs the polling
+# reconciler and the follow-gate checks. Must stay running — this is not a
+# serverless workload.
+#
+# Deliberately does NOT run `next build`. The worker only needs the generated
+# Prisma client and the TypeScript sources, which tsx executes directly.
+# Running the Next build here would be wasted minutes and, worse, invites the
+# `prisma migrate deploy` mistake that fails without a reachable database.
+
+FROM node:24-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM node:24-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Prisma client only — no Next build.
+RUN npx prisma generate
+
+RUN groupadd --system --gid 1001 nodejs \
+ && useradd --system --uid 1001 --gid nodejs worker \
+ && chown -R worker:nodejs /app
+
+USER worker
+CMD ["npm", "run", "worker"]

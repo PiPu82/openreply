@@ -1,5 +1,6 @@
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Resend from "next-auth/providers/resend";
+import Nodemailer from "next-auth/providers/nodemailer";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db/client";
 import { ensureWorkspaceForUser, getPrimaryWorkspace } from "@/lib/workspace";
@@ -9,10 +10,26 @@ type AdapterPrismaClient = Parameters<typeof PrismaAdapter>[0];
 export const authConfig = {
   adapter: PrismaAdapter(prisma as unknown as AdapterPrismaClient),
   providers: [
-    Resend({
-      apiKey: process.env.RESEND_API_KEY ?? "missing-resend-api-key",
-      from: process.env.EMAIL_FROM ?? "OpenReply <login@example.com>",
-    }),
+    // Login is email magic links only. Two transports are supported:
+    //
+    //   EMAIL_SERVER set -> generic SMTP via Nodemailer. Use this to send
+    //     through a provider you already run (Brevo, Postmark, your own relay)
+    //     instead of adding another vendor. Format:
+    //     smtp://user:pass@smtp-relay.example.com:587
+    //
+    //   otherwise      -> Resend, the upstream default.
+    //
+    // Written as a fallback rather than a replacement so the upstream default
+    // keeps working untouched and this stays mergeable.
+    process.env.EMAIL_SERVER
+      ? Nodemailer({
+          server: process.env.EMAIL_SERVER,
+          from: process.env.EMAIL_FROM ?? "OpenReply <login@example.com>",
+        })
+      : Resend({
+          apiKey: process.env.RESEND_API_KEY ?? "missing-resend-api-key",
+          from: process.env.EMAIL_FROM ?? "OpenReply <login@example.com>",
+        }),
   ],
   callbacks: {
     async session({ session, user }) {

@@ -1,0 +1,17 @@
+# Keep the build context small and avoid leaking local state into images.
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+npm-debug.log*
+*.tsbuildinfo
+__tests__
+docs
+README.md
+CONTRIBUTING.md
+SECURITY.md
+AGENTS.md
+CLAUDE.md

@@ -1,0 +1,41 @@
+# Web app: dashboard, OAuth callback, webhook receiver.
+#
+# Debian slim rather than Alpine on purpose: Prisma's query engine needs
+# OpenSSL and glibc, which costs extra setup and a class of hard-to-debug
+# failures on musl. Disk is cheap here, debugging time is not.
+
+FROM node:24-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM node:24-slim AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# Generate the Prisma client before the build — several modules import from
+# @/app/generated/prisma and the type check fails without it.
+RUN npx prisma generate
+# NOTE: `prisma migrate deploy` must NOT run here. There is no database
+# reachable at build time; migrations run at startup or as a one-off job.
+RUN npm run build
+
+FROM node:24-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# Run unprivileged.
+RUN groupadd --system --gid 1001 nodejs \
+ && useradd --system --uid 1001 --gid nodejs nextjs
+
+# The standalone server does not bundle public/ or .next/static — those have
+# to be copied in explicitly, otherwise assets 404 at runtime.
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+USER nextjs
+EXPOSE 3000
+CMD ["node", "server.js"]

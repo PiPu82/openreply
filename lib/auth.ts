@@ -23,6 +23,14 @@ export const authConfig = {
     // keeps working untouched and this stays mergeable.
     process.env.EMAIL_SERVER
       ? Nodemailer({
+          // Keep the provider id "resend" even on the SMTP path. app/login
+          // calls signIn("resend", ...) by name, and Auth.js resolves
+          // providers by id — a Nodemailer provider registered as
+          // "nodemailer" makes that call fail, surfacing as a misleading
+          // MissingCSRF error rather than "unknown provider".
+          // Overriding the id here keeps app/login untouched and upstream-
+          // mergeable; the transport is what changes, not the entry point.
+          id: "resend",
           server: process.env.EMAIL_SERVER,
           from: process.env.EMAIL_FROM ?? "OpenReply <login@example.com>",
         })

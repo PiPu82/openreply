@@ -10,21 +10,26 @@
 FROM node:24-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# Production deps only. tsx lives in devDependencies but is the worker's
+# runtime (`tsx worker/dm-worker.ts`), so it is added back explicitly instead
+# of dragging in TypeScript, Vitest and ESLint for nothing.
+RUN npm ci --omit=dev && npm install --no-save tsx
 
 FROM node:24-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-
-# Prisma client only — no Next build.
-RUN npx prisma generate
-
+# Create the user before copying, so ownership is set by COPY --chown.
+# A `chown -R` afterwards would rewrite every file into a second image layer
+# and roughly double the image size.
 RUN groupadd --system --gid 1001 nodejs \
- && useradd --system --uid 1001 --gid nodejs worker \
- && chown -R worker:nodejs /app
+ && useradd --system --uid 1001 --gid nodejs worker
+
+COPY --from=deps --chown=worker:nodejs /app/node_modules ./node_modules
+COPY --chown=worker:nodejs . .
+
+# Prisma client only — no Next build. Small output, so chowning it is cheap.
+RUN npx prisma generate && chown -R worker:nodejs ./app/generated
 
 USER worker
 CMD ["npm", "run", "worker"]

@@ -1,0 +1,137 @@
+# Self-hosted OpenReply: web, worker, Postgres, Redis.
+#
+# Images are built by GitHub Actions and pulled here — never built on the
+# host. The Next.js build peaks at 1–1.5 GB, which would push a small VPS
+# into swap and take the neighbouring containers with it.
+#
+#   docker compose -f docker-compose.selfhost.yml pull
+#   docker compose -f docker-compose.selfhost.yml run --rm migrate
+#   docker compose -f docker-compose.selfhost.yml up -d
+#
+# No ports are published. Traffic arrives through cloudflared, so nothing
+# listens on a public interface.
+
+name: openreply
+
+services:
+  web:
+    image: ghcr.io/pipu82/openreply-web:latest
+    container_name: openreply-web
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 350m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks: [openreply-net]
+
+  worker:
+    image: ghcr.io/pipu82/openreply-worker:latest
+    container_name: openreply-worker
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 220m
+    cpus: 0.4
+    networks: [openreply-net]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: openreply-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openreply
+      POSTGRES_USER: openreply
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt in .env}
+    # Tuned down for a small host. Defaults assume far more RAM than we have.
+    command: >
+      postgres
+      -c shared_buffers=64MB
+      -c max_connections=40
+      -c work_mem=4MB
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    mem_limit: 200m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openreply -d openreply"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [openreply-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: openreply-redis
+    restart: unless-stopped
+    # noeviction is REQUIRED by BullMQ. With any eviction policy Redis would
+    # silently drop queued jobs under memory pressure — and since Meta allows
+    # exactly one private reply per comment, a dropped job is a lost lead
+    # that can never be retried.
+    command: >
+      redis-server
+      --maxmemory 48mb
+      --maxmemory-policy noeviction
+      --appendonly yes
+    volumes:
+      - redisdata:/data
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [openreply-net]
+
+  # Own tunnel rather than extending the existing vermieterente one: that one
+  # lives in vermieterente-net and could not reach these containers anyway,
+  # and a separate tunnel keeps the failure domains apart.
+  # Dashboard-managed (TUNNEL_TOKEN) — ingress rules are configured in
+  # Cloudflare Zero Trust, not in a local config file.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: openreply-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN fehlt in .env}
+    depends_on:
+      - web
+    mem_limit: 64m
+    networks: [openreply-net]
+
+  # One-off migration runner. Uses the worker image because it carries the
+  # Prisma CLI; the web image is a standalone bundle without it.
+  #   docker compose -f docker-compose.selfhost.yml run --rm migrate
+  migrate:
+    image: ghcr.io/pipu82/openreply-worker:latest
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npx", "prisma", "migrate", "deploy"]
+    restart: "no"
+    profiles: ["tools"]
+    networks: [openreply-net]
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  openreply-net:
+    driver: bridge

@@ -10,10 +10,13 @@
 FROM node:24-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-# Production deps only. tsx lives in devDependencies but is the worker's
-# runtime (`tsx worker/dm-worker.ts`), so it is added back explicitly instead
-# of dragging in TypeScript, Vitest and ESLint for nothing.
-RUN npm ci --omit=dev && npm install --no-save tsx
+# Production deps only, plus the two devDependencies this image genuinely
+# needs at runtime:
+#   tsx    — the worker's runtime (`tsx worker/dm-worker.ts`)
+#   prisma — the CLI, for `prisma migrate deploy` against the live database.
+#            Without it npx would fetch it over the network on every run.
+# Everything else (TypeScript, Vitest, ESLint) stays out.
+RUN npm ci --omit=dev && npm install --no-save tsx prisma
 
 FROM node:24-slim AS runner
 WORKDIR /app

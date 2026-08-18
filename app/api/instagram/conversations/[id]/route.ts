@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
-import { getConversationMessages, MetaApiError } from "@/lib/meta/client";
+import {
+  getConversationMessages,
+  messagePreviewText,
+  MetaApiError,
+} from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 
 export interface ThreadMessage {
@@ -49,7 +53,9 @@ export async function GET(request: NextRequest, { params }: RouteProps) {
     const messages: ThreadMessage[] = raw
       .map((m) => ({
         id: m.id,
-        text: m.message ?? "",
+        // Wie in der Listenansicht: eigene DMs sind Button-Templates und
+        // haben ein leeres message-Feld.
+        text: messagePreviewText(m),
         fromMe: m.from?.id === account.instagramId,
         fromUsername: m.from?.username ?? null,
         createdTime: m.created_time ?? null,

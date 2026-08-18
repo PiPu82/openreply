@@ -554,7 +554,12 @@ export async function getConversationMessages(
   conversationId: string
 ): Promise<InstagramMessage[]> {
   const url = new URL(`${instagramGraphBase()}/${conversationId}`);
-  url.searchParams.set("fields", "messages{id,created_time,from,to,message}");
+  // attachments mitholen: bei Button-Templates ist `message` leer und der
+  // sichtbare Text steckt in generic_template.title (s. messagePreviewText).
+  url.searchParams.set(
+    "fields",
+    "messages{id,created_time,from,to,message,attachments}"
+  );
   url.searchParams.set("access_token", accessToken);
 
   const response = await fetch(url.toString());

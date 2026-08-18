@@ -3,7 +3,7 @@ import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import {
   getConversationMessages,
-  messagePreviewText,
+  messageDetailText,
   MetaApiError,
 } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest, { params }: RouteProps) {
         id: m.id,
         // Wie in der Listenansicht: eigene DMs sind Button-Templates und
         // haben ein leeres message-Feld.
-        text: messagePreviewText(m),
+        text: messageDetailText(m),
         fromMe: m.from?.id === account.instagramId,
         fromUsername: m.from?.username ?? null,
         createdTime: m.created_time ?? null,

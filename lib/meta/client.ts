@@ -504,15 +504,47 @@ export interface InstagramMessage {
         title?: string;
         cta?: Array<{ title?: string; url?: string; type?: string }>;
       };
+      image_data?: unknown;
+      video_data?: unknown;
+      file_url?: string;
     }>;
   };
 }
 
-/** Visible text of a message, template attachments included. */
+/**
+ * Short label for a message, for list previews.
+ *
+ * Plain text when present; the template title for our own button messages;
+ * a placeholder for media, so an image never renders as a blank row.
+ */
 export function messagePreviewText(message: InstagramMessage): string {
   if (message.message) return message.message;
-  const template = message.attachments?.data?.[0]?.generic_template;
-  return template?.title ?? "";
+
+  const attachment = message.attachments?.data?.[0];
+  if (!attachment) return "";
+
+  if (attachment.generic_template?.title) {
+    return attachment.generic_template.title;
+  }
+  if (attachment.image_data) return "[Bild]";
+  if (attachment.video_data) return "[Video]";
+  if (attachment.file_url) return "[Datei]";
+  return "[Anhang]";
+}
+
+/**
+ * Full text for the thread view: like the preview, plus the button label and,
+ * where the button is a link, its target. That target is the tracked short
+ * link, so this shows exactly which URL a given person received — useful when
+ * someone asks what they were sent, or to look the link up in click stats.
+ */
+export function messageDetailText(message: InstagramMessage): string {
+  const base = messagePreviewText(message);
+  const cta = message.attachments?.data?.[0]?.generic_template?.cta?.[0];
+  if (!cta?.title) return base;
+
+  const target = cta.type === "web_url" && cta.url ? ` → ${cta.url}` : "";
+  return [base, `[${cta.title}]${target}`].filter(Boolean).join("\n");
 }
 
 export interface InstagramConversation {

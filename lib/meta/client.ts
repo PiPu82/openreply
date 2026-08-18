@@ -484,12 +484,35 @@ export interface InstagramParticipant {
   username?: string;
 }
 
+/**
+ * A message as returned by the conversations endpoint.
+ *
+ * `message` carries the plain text — but it is EMPTY for anything we send as
+ * a button template, which is every automated DM. The visible text then lives
+ * in `attachments.data[].generic_template.title`, which is why that field is
+ * requested and read as a fallback.
+ */
 export interface InstagramMessage {
   id: string;
   created_time?: string;
   message?: string;
   from?: InstagramParticipant;
   to?: { data: InstagramParticipant[] };
+  attachments?: {
+    data: Array<{
+      generic_template?: {
+        title?: string;
+        cta?: Array<{ title?: string; url?: string; type?: string }>;
+      };
+    }>;
+  };
+}
+
+/** Visible text of a message, template attachments included. */
+export function messagePreviewText(message: InstagramMessage): string {
+  if (message.message) return message.message;
+  const template = message.attachments?.data?.[0]?.generic_template;
+  return template?.title ?? "";
 }
 
 export interface InstagramConversation {
@@ -512,7 +535,7 @@ export async function getConversations(
   url.searchParams.set("platform", "instagram");
   url.searchParams.set(
     "fields",
-    "participants,updated_time,messages.limit(1){message,from,created_time}"
+    "participants,updated_time,messages.limit(1){message,from,created_time,attachments}"
   );
   url.searchParams.set("limit", "50");
   url.searchParams.set("access_token", accessToken);

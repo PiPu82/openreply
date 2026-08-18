@@ -3,6 +3,7 @@ import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import {
   getConversations,
+  messagePreviewText,
   sendDirectMessage,
   MetaApiError,
 } from "@/lib/meta/client";
@@ -66,7 +67,11 @@ export async function GET(request: NextRequest) {
         updatedTime: c.updated_time ?? null,
         lastMessage: last
           ? {
-              text: last.message ?? "",
+              // Nicht last.message: bei Button-Templates — also jeder
+              // automatisch versendeten DM — ist das Feld leer, und die Inbox
+              // zeigte "(No text)". messagePreviewText holt dann den Titel
+              // aus dem Attachment.
+              text: messagePreviewText(last),
               fromMe: last.from?.id === account.instagramId,
               createdTime: last.created_time ?? null,
             }

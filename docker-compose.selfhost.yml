@@ -111,7 +111,7 @@ services:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN fehlt in .env}
     depends_on:
       - web
-    mem_limit: 64m
+    mem_limit: 128m
     networks: [openreply-net]
 
   # One-off migration runner. Uses the worker image because it carries the

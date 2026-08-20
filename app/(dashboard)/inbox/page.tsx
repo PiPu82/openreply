@@ -35,6 +35,29 @@ function formatTime(iso: string | null): string {
     : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+/**
+ * Timestamp under a message bubble. Unlike the conversation list, this always
+ * carries the clock time: "when exactly did this go out" is the question a
+ * thread gets read for, and a bare date cannot answer it. Older messages keep
+ * the date in front of the time.
+ */
+function formatMessageTime(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const sameDay = d.toDateString() === new Date().toDateString();
+  if (sameDay) return time;
+  const date = d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${date}, ${time}`;
+}
+
 export default function InboxPage() {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   // Seed from the last-used account so a revisit can paint the cached
@@ -370,7 +393,7 @@ export default function InboxPage() {
                             m.fromMe ? "text-white/70" : "text-zinc-500"
                           }`}
                         >
-                          {formatTime(m.createdTime)}
+                          {formatMessageTime(m.createdTime)}
                         </p>
                       </div>
                     </div>

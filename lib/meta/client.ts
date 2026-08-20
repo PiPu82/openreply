@@ -35,8 +35,12 @@ export class RateLimitError extends MetaApiError {
 }
 
 export class PermissionError extends MetaApiError {
-  constructor(message: string, fbTraceId?: string) {
-    super(100, undefined, fbTraceId, message);
+  // Code 100 covers a wide range of refusals; the subcode is what tells them
+  // apart. Keep it rather than dropping it, so callers (and the DM logs) can
+  // distinguish "template not supported" from "this comment cannot be replied
+  // to" without parsing Meta's localized error text.
+  constructor(message: string, fbTraceId?: string, subcode?: number) {
+    super(100, subcode, fbTraceId, message);
     this.name = "PermissionError";
   }
 }
@@ -128,7 +132,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
       case 10:
       case 100:
       case 200:
-        throw new PermissionError(message, traceId);
+        throw new PermissionError(message, traceId, subcode);
       default:
         throw new MetaApiError(code, subcode, traceId, message);
     }

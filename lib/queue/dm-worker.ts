@@ -1,4 +1,4 @@
-import { Worker, type Job } from "bullmq";
+import { UnrecoverableError, Worker, type Job } from "bullmq";
 import {
   getDMQueue,
   getRedisConnection,
@@ -43,7 +43,11 @@ const BACKOFF_DELAYS = [5 * 60 * 1000, 15 * 60 * 1000, 45 * 60 * 1000];
 
 function formatError(error: unknown): string {
   if (error instanceof MetaApiError) {
-    return `Meta API Error ${error.code}: ${error.message}`;
+    // Include the subcode: code 100 alone lumps unrelated refusals together,
+    // and the subcode is the only stable way to tell them apart — Meta's
+    // message text is localized and cannot be matched on.
+    const subcode = error.subcode ? `/${error.subcode}` : "";
+    return `Meta API Error ${error.code}${subcode}: ${error.message}`;
   }
   if (error instanceof Error) {
     return error.message;
@@ -68,6 +72,33 @@ function isTemplateRejection(error: unknown): boolean {
   }
   const message = error instanceof Error ? error.message : "";
   return !NON_TEMPLATE_REJECTIONS.some((pattern) => pattern.test(message));
+}
+
+/**
+ * Whether a failed private reply is worth another attempt.
+ *
+ * Meta allows exactly one private reply per comment, ever — and the allowance is
+ * spent on the attempt, not on a delivered message. Once Meta has refused one,
+ * every retry fails identically: it burns API calls, and because each attempt
+ * rewrites DmLog.updatedAt it also reports the same lost lead as a fresh failure
+ * on every monitoring run. On 20.08.2026 a single comment produced three alerts
+ * that way.
+ *
+ * Deliberately not keyed on the error text. Meta returns messages in the
+ * account's language — the refusals seen in production read "Der Kommentar ist
+ * für private Antworten ungültig", so the English patterns in
+ * NON_TEMPLATE_REJECTIONS never matched. Only two cases justify a retry:
+ *
+ *   - RateLimitError    nothing was sent, the allowance is untouched
+ *   - TokenExpiredError the daily refresh cron fixes it
+ *   - non-Meta errors   a network failure or timeout may never have reached
+ *                       Meta at all, so the allowance may still be unspent
+ */
+function isWorthRetrying(error: unknown): boolean {
+  if (error instanceof RateLimitError || error instanceof TokenExpiredError) {
+    return true;
+  }
+  return !(error instanceof MetaApiError);
 }
 
 type WorkerTrackedLink = {
@@ -668,6 +699,12 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           errorMessage: formatError(error),
         },
       });
+
+      // The comment's single private reply is spent, so BullMQ's remaining
+      // attempts can only reproduce the same failure — end the job here.
+      if (!isWorthRetrying(error)) {
+        throw new UnrecoverableError(formatError(error));
+      }
       throw error;
     }
   }

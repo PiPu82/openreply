@@ -65,14 +65,16 @@ vi.mock("@/lib/meta/client", () => ({
   sendCommentReply: vi.fn(),
   MetaApiError: class MetaApiError extends Error {
     code: number;
+    subcode: number | undefined;
     constructor(
       code: number,
-      _subcode: number | undefined,
+      subcode: number | undefined,
       _fbTraceId: string | undefined,
       message: string
     ) {
       super(message);
       this.code = code;
+      this.subcode = subcode;
       this.name = "MetaApiError";
     }
   },
@@ -123,12 +125,20 @@ vi.mock("bullmq", () => {
       close: vi.fn(),
     };
   }
+  class UnrecoverableError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "UnrecoverableError";
+    }
+  }
   return {
     Worker: MockWorker,
+    UnrecoverableError,
   };
 });
 
 import { createDMWorker } from "../lib/queue/dm-worker";
+import { MetaApiError, RateLimitError } from "@/lib/meta/client";
 
 const usagePeriodStart = new Date("2026-05-01T00:00:00.000Z");
 
@@ -462,6 +472,51 @@ describe("DM Worker — Full Pipeline", () => {
         errorMessage: "API Error",
       }),
     });
+  });
+
+  it("should not retry a private reply Meta refused, whatever language it answers in", async () => {
+    // Meta returns error text in the account's language, so the refusal cannot
+    // be recognised by matching English wording. The comment's single allowed
+    // private reply is spent either way, so further attempts can only repeat
+    // the failure — and each one would re-alert monitoring.
+    mockSendPrivateReply.mockRejectedValue(
+      new MetaApiError(
+        100,
+        2534037,
+        undefined,
+        "Der Kommentar ist für private Antworten ungültig"
+      )
+    );
+
+    const processor = getProcessor();
+
+    await expect(processor(createMockJob())).rejects.toMatchObject({
+      name: "UnrecoverableError",
+    });
+    expect(mockPrisma.dmLog.update).toHaveBeenCalledWith({
+      where: {
+        automationId_commentId: {
+          automationId: "auto_789",
+          commentId: "comment_555",
+        },
+      },
+      // The subcode is recorded: code 100 alone cannot tell refusals apart.
+      data: expect.objectContaining({
+        status: "FAILED",
+        errorMessage:
+          "Meta API Error 100/2534037: Der Kommentar ist für private Antworten ungültig",
+      }),
+    });
+  });
+
+  it("should still retry when the send was rate limited", async () => {
+    // Nothing was delivered, so the comment's private reply is still unspent.
+    mockSendPrivateReply.mockRejectedValue(new RateLimitError("slow down"));
+
+    const processor = getProcessor();
+
+    const thrown = await processor(createMockJob()).catch((e) => e);
+    expect(thrown.name).not.toBe("UnrecoverableError");
   });
 
   it("should handle missing access token", async () => {

@@ -13,27 +13,27 @@ const TONE_CLASSES: Record<Tone, string> = {
 const MESSAGES: Record<string, { tone: Tone; title: string; detail: string }> = {
   denied: {
     tone: "warning",
-    title: "Instagram connection cancelled",
+    title: "Instagram-Verbindung abgebrochen",
     detail:
-      "You declined the permission prompt on Instagram. Start again and accept all requested permissions.",
+      "Du hast die Berechtigungsabfrage bei Instagram abgelehnt. Starte erneut und bestätige alle angefragten Berechtigungen.",
   },
   invalid: {
     tone: "error",
-    title: "Instagram connection expired",
+    title: "Instagram-Verbindung abgelaufen",
     detail:
-      "The login link was missing or older than 10 minutes. Click Connect Instagram to start a fresh attempt.",
+      "Der Anmeldelink fehlte oder war älter als 10 Minuten. Klicke auf „Instagram verbinden“ für einen neuen Versuch.",
   },
   forbidden: {
     tone: "error",
-    title: "Not permitted",
+    title: "Nicht berechtigt",
     detail:
-      "Only workspace owners and admins can connect an Instagram account.",
+      "Nur Eigentümer und Administratoren des Arbeitsbereichs können ein Instagram-Konto verbinden.",
   },
   already_connected: {
     tone: "warning",
-    title: "Account already connected",
+    title: "Konto bereits verbunden",
     detail:
-      "That Instagram account is connected to another workspace. Disconnect it there first, or connect a different account.",
+      "Dieses Instagram-Konto ist mit einem anderen Arbeitsbereich verbunden. Trenne es dort zuerst oder verbinde ein anderes Konto.",
   },
 };
 
@@ -49,7 +49,7 @@ export function InstagramConnectNotice() {
       .filter(Boolean);
 
     return (
-      <Notice tone="error" title="Instagram app not configured">
+      <Notice tone="error" title="Instagram-App nicht konfiguriert">
         <p>
           Set{" "}
           {missing.length > 0
@@ -80,7 +80,7 @@ export function InstagramConnectNotice() {
     const reason = searchParams.get("reason");
 
     return (
-      <Notice tone="error" title="Instagram connection failed">
+      <Notice tone="error" title="Instagram-Verbindung fehlgeschlagen">
         <p>
           Instagram accepted the login but the connection could not be
           completed. This is usually a mismatched redirect URI or an app that is

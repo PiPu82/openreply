@@ -50,18 +50,18 @@ const EMPTY_FILTERS: InboxFilterState = {
 const STATE_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
   {
     value: "awaiting_reply",
-    label: "Awaiting reply",
-    hint: "They wrote last and nobody has answered",
+    label: "Wartet auf Antwort",
+    hint: "Die Person hat zuletzt geschrieben und niemand hat geantwortet",
   },
   {
     value: "dm_failed",
-    label: "DM failed",
-    hint: "Instagram refused the DM — only the public reply got through",
+    label: "DM fehlgeschlagen",
+    hint: "Instagram hat die DM abgelehnt — nur die öffentliche Antwort kam an",
   },
   {
     value: "delivered_unread",
-    label: "Delivered, unread",
-    hint: "Sent, but Instagram has never reported it as read",
+    label: "Zugestellt, ungelesen",
+    hint: "Gesendet, aber Instagram meldet sie bis heute nicht als gelesen",
   },
 ];
 
@@ -215,10 +215,10 @@ export default function InboxPage() {
           }
           setConvError(null);
         } else if (!silent) {
-          setConvError(data.error ?? "Failed to load conversations");
+          setConvError(data.error ?? "Unterhaltungen konnten nicht geladen werden");
         }
       } catch {
-        if (!silent) setConvError("Failed to load conversations");
+        if (!silent) setConvError("Unterhaltungen konnten nicht geladen werden");
       } finally {
         // Always cleared, including on silent loads: a filter change reloads
         // silently, and an initial "Loading…" would otherwise never resolve.
@@ -362,12 +362,12 @@ export default function InboxPage() {
         // Roll the optimistic message back and restore the draft so it's not lost.
         setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
         setDraft(text);
-        setSendError(data.error ?? "Failed to send message");
+        setSendError(data.error ?? "Nachricht konnte nicht gesendet werden");
       }
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       setDraft(text);
-      setSendError("Failed to send message");
+      setSendError("Nachricht konnte nicht gesendet werden");
     } finally {
       setSending(false);
     }
@@ -393,15 +393,15 @@ export default function InboxPage() {
       if (data.success) {
         const added = data.data.messages as number;
         setRefreshNote(
-          added > 0 ? `${added} message(s) recovered` : "Already up to date"
+          added > 0 ? `${added} Nachricht(en) nachgetragen` : "Bereits auf dem neuesten Stand"
         );
         await loadConversations(true);
         if (activeId) await loadMessages(activeId, true);
       } else {
-        setRefreshNote(data.error ?? "Refresh failed");
+        setRefreshNote(data.error ?? "Aktualisieren fehlgeschlagen");
       }
     } catch {
-      setRefreshNote("Refresh failed");
+      setRefreshNote("Aktualisieren fehlgeschlagen");
     } finally {
       setRefreshing(false);
       window.setTimeout(() => setRefreshNote(null), 4000);
@@ -443,10 +443,10 @@ export default function InboxPage() {
         setMessages([]);
         await loadConversations(true);
       } else {
-        setSendError(data.error ?? "Delete failed");
+        setSendError(data.error ?? "Löschen fehlgeschlagen");
       }
     } catch {
-      setSendError("Delete failed");
+      setSendError("Löschen fehlgeschlagen");
     } finally {
       setBusyAction(null);
     }
@@ -491,15 +491,15 @@ export default function InboxPage() {
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, q: e.target.value }))
                 }
-                placeholder="Search names and messages…"
+                placeholder="Namen und Nachrichten durchsuchen…"
                 className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1.5 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => void handleRefresh()}
                 disabled={refreshing}
-                title="Check Meta for anything missing"
-                aria-label="Refresh"
+                title="Bei Meta nachsehen, ob etwas fehlt"
+                aria-label="Aktualisieren"
                 className="shrink-0 rounded border border-border px-2 py-1.5 text-sm text-muted hover:text-foreground disabled:opacity-50"
               >
                 {refreshing ? "…" : "⟳"}
@@ -512,7 +512,7 @@ export default function InboxPage() {
                 onClick={() => setFiltersOpen((open) => !open)}
                 className="rounded px-1 py-0.5 text-muted hover:text-foreground"
               >
-                Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}{" "}
+                Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}{" "}
                 {filtersOpen ? "▴" : "▾"}
               </button>
               {activeFilterCount > 0 && (
@@ -521,7 +521,7 @@ export default function InboxPage() {
                   onClick={() => setFilters(EMPTY_FILTERS)}
                   className="rounded px-1 py-0.5 text-muted hover:text-foreground"
                 >
-                  Clear
+                  Zurücksetzen
                 </button>
               )}
             </div>
@@ -561,17 +561,17 @@ export default function InboxPage() {
                     onChange={(e) =>
                       setFilters((f) => ({ ...f, from: e.target.value }))
                     }
-                    aria-label="From date"
+                    aria-label="Von Datum"
                     className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent/40 focus:outline-none"
                   />
-                  <span className="text-xs text-muted">to</span>
+                  <span className="text-xs text-muted">bis</span>
                   <input
                     type="date"
                     value={filters.to}
                     onChange={(e) =>
                       setFilters((f) => ({ ...f, to: e.target.value }))
                     }
-                    aria-label="To date"
+                    aria-label="Bis Datum"
                     className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent/40 focus:outline-none"
                   />
                 </div>
@@ -581,15 +581,15 @@ export default function InboxPage() {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, automation: e.target.value }))
                   }
-                  aria-label="Automation"
+                  aria-label="Automatisierung"
                   className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent/40 focus:outline-none"
                 >
-                  <option value="">Any automation</option>
+                  <option value="">Beliebige Automatisierung</option>
                   {/* The two that are not a campaign: reached by something, and
                       reached by nothing — the latter being people who wrote in
                       on their own. */}
-                  <option value="any">Reached by an automation</option>
-                  <option value="none">No automation (wrote in themselves)</option>
+                  <option value="any">Von einer Automatisierung erfasst</option>
+                  <option value="none">Ohne Automatisierung (von sich aus geschrieben)</option>
                   {filterOptions.automations.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -603,10 +603,10 @@ export default function InboxPage() {
                     onChange={(e) =>
                       setFilters((f) => ({ ...f, keyword: e.target.value }))
                     }
-                    aria-label="Keyword"
+                    aria-label="Schlüsselwort"
                     className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent/40 focus:outline-none"
                   >
-                    <option value="">Any keyword</option>
+                    <option value="">Beliebiges Schlüsselwort</option>
                     {filterOptions.keywords.map((k) => (
                       <option key={k} value={k}>
                         {k}
@@ -619,16 +619,16 @@ export default function InboxPage() {
 
             <p className="text-[11px] text-muted">
               {refreshNote ??
-                `${conversations.length} shown · ${awaitingReply} awaiting reply`}
+                `${conversations.length} angezeigt · ${awaitingReply} warten auf Antwort`}
             </p>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {convLoading ? (
-              <p className="px-4 py-6 text-sm text-muted">Loading…</p>
+              <p className="px-4 py-6 text-sm text-muted">Lädt…</p>
             ) : convError ? (
               <p className="px-4 py-6 text-sm text-error">{convError}</p>
             ) : conversations.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted">No conversations yet.</p>
+              <p className="px-4 py-6 text-sm text-muted">Noch keine Unterhaltungen.</p>
             ) : (
               conversations.map((c) => {
                 const isActive = c.id === activeId;
@@ -643,7 +643,7 @@ export default function InboxPage() {
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-sm font-medium text-foreground">
-                        @{c.contact.username ?? "unknown"}
+                        @{c.contact.username ?? "unbekannt"}
                       </span>
                       <span className="shrink-0 text-[11px] text-zinc-500">
                         {formatTime(c.updatedTime)}
@@ -651,8 +651,8 @@ export default function InboxPage() {
                     </div>
                     {c.lastMessage && (
                       <p className="mt-0.5 truncate text-xs text-muted">
-                        {c.lastMessage.fromMe ? "You: " : ""}
-                        {c.lastMessage.text || "(no text)"}
+                        {c.lastMessage.fromMe ? "Du: " : ""}
+                        {c.lastMessage.text || "(kein Text)"}
                       </p>
                     )}
                     <p className="mt-1 truncate text-[10px] text-zinc-500">
@@ -667,7 +667,7 @@ export default function InboxPage() {
                           {c.automation.status === "FAILED" ? " · DM failed" : ""}
                         </>
                       ) : (
-                        "No automation"
+                        "Ohne Automatisierung"
                       )}
                     </p>
                   </button>
@@ -684,7 +684,7 @@ export default function InboxPage() {
         >
           {!active ? (
             <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted">
-              Select a conversation to read and reply.
+              Wähle eine Unterhaltung aus, um sie zu lesen und zu antworten.
             </div>
           ) : (
             <>
@@ -693,13 +693,13 @@ export default function InboxPage() {
                   type="button"
                   onClick={() => setActiveId(null)}
                   className="-ml-1 rounded px-2 py-1 text-muted hover:text-foreground sm:hidden"
-                  aria-label="Back to conversations"
+                  aria-label="Zurück zu den Unterhaltungen"
                 >
-                  Back
+                  Zurück
                 </button>
                 <div className="min-w-0 flex-1">
                   <span className="block truncate">
-                    @{active.contact.username ?? "unknown"}
+                    @{active.contact.username ?? "unbekannt"}
                   </span>
                   <span className="block truncate text-[11px] font-normal text-muted">
                     {active.automation
@@ -712,7 +712,7 @@ export default function InboxPage() {
                         ]
                           .filter(Boolean)
                           .join(" · ")
-                      : "Wrote in without an automation"}
+                      : "Ohne Automatisierung geschrieben"}
                   </span>
                 </div>
 
@@ -720,27 +720,27 @@ export default function InboxPage() {
                   type="button"
                   onClick={handleExport}
                   disabled={busyAction !== null}
-                  title="Download everything stored about this contact"
+                  title="Alle gespeicherten Daten zu diesem Kontakt herunterladen"
                   className="shrink-0 rounded border border-border px-2 py-1 text-xs font-normal text-muted hover:text-foreground disabled:opacity-50"
                 >
-                  Export
+                  Exportieren
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleDelete()}
                   disabled={busyAction !== null}
-                  title="Erase this contact from this app"
+                  title="Diesen Kontakt aus dieser Anwendung löschen"
                   className="shrink-0 rounded border border-border px-2 py-1 text-xs font-normal text-error hover:bg-error/10 disabled:opacity-50"
                 >
-                  {busyAction === "delete" ? "Deleting…" : "Delete"}
+                  {busyAction === "delete" ? "Löschen…" : "Löschen"}
                 </button>
               </div>
 
               <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
                 {threadLoading && messages.length === 0 ? (
-                  <p className="text-sm text-muted">Loading…</p>
+                  <p className="text-sm text-muted">Lädt…</p>
                 ) : messages.length === 0 ? (
-                  <p className="text-sm text-muted">No messages.</p>
+                  <p className="text-sm text-muted">Keine Nachrichten.</p>
                 ) : (
                   messages.map((m) => (
                     <div
@@ -763,7 +763,7 @@ export default function InboxPage() {
                           {formatMessageTime(m.createdTime)}
                           {/* Read receipts only exist for what we sent, and
                               only once Instagram reports them. */}
-                          {m.fromMe && m.readTime ? " · Read" : ""}
+                          {m.fromMe && m.readTime ? " · Gelesen" : ""}
                         </p>
                       </div>
                     </div>
@@ -781,7 +781,7 @@ export default function InboxPage() {
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={handleKeyDown}
                     rows={1}
-                    placeholder="Write a reply…  (Enter to send, Shift+Enter for a new line)"
+                    placeholder="Antwort schreiben…  (Enter sendet, Umschalt+Enter für eine neue Zeile)"
                     className="max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
                   />
                   <button
@@ -790,7 +790,7 @@ export default function InboxPage() {
                     disabled={sending || !draft.trim()}
                     className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                   >
-                    {sending ? "Sending…" : "Send"}
+                    {sending ? "Senden…" : "Senden"}
                   </button>
                 </div>
               </div>

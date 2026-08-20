@@ -18,7 +18,7 @@ export default function StatCard({ label, value, trend, trendUp }: StatCardProps
       <p className="text-2xl font-semibold text-foreground mt-1">{value}</p>
       {trend && (
         <p className={`text-xs mt-1 ${trendUp ? "text-success" : "text-error"}`}>
-          {trendUp ? "Up" : "Down"} {trend}
+          {trendUp ? "Auf" : "Ab"} {trend}
         </p>
       )}
     </div>

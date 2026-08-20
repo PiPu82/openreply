@@ -27,10 +27,10 @@ function formatDate(iso: string): string {
 }
 
 const COUNT_OPTIONS = [
-  { value: "25", label: "Last 25" },
-  { value: "50", label: "Last 50" },
-  { value: "100", label: "Last 100" },
-  { value: "all", label: "All time" },
+  { value: "25", label: "Letzte 25" },
+  { value: "50", label: "Letzte 50" },
+  { value: "100", label: "Letzte 100" },
+  { value: "all", label: "Gesamter Zeitraum" },
 ];
 
 export default function OverviewPage() {
@@ -54,10 +54,10 @@ export default function OverviewPage() {
           setData(res.data);
           setError(null);
         } else {
-          setError(res.error ?? "Failed to load overview");
+          setError(res.error ?? "Auswertung konnte nicht geladen werden");
         }
       })
-      .catch(() => setError("Failed to load overview"))
+      .catch(() => setError("Auswertung konnte nicht geladen werden"))
       .finally(() => setLoading(false));
   }, [selectedAccountId, count]);
 
@@ -109,9 +109,9 @@ export default function OverviewPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-foreground">Overview</h1>
+          <h1 className="text-lg font-semibold text-foreground">Auswertung</h1>
           <p className="text-sm text-muted mt-1">
-            {data.requestedCount === "all" ? "All-time" : "Recent"} —{" "}
+            {data.requestedCount === "all" ? "Gesamt" : "Aktuell"} —{" "}
             {totals.posts} post{totals.posts === 1 ? "" : "s"} from @
             {data.account.username}
             {data.truncated ? ` (capped at ${totals.posts})` : ""}
@@ -175,12 +175,12 @@ export default function OverviewPage() {
 
       {/* Aggregate totals */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <StatCard label="Views" value={formatNumber(totals.views)} />
-        <StatCard label="Reach" value={formatNumber(totals.reach)} />
+        <StatCard label="Aufrufe" value={formatNumber(totals.views)} />
+        <StatCard label="Reichweite" value={formatNumber(totals.reach)} />
         <StatCard label="Likes" value={formatNumber(totals.likes)} />
-        <StatCard label="Comments" value={formatNumber(totals.comments)} />
-        <StatCard label="Saved" value={formatNumber(totals.saved)} />
-        <StatCard label="Shares" value={formatNumber(totals.shares)} />
+        <StatCard label="Kommentare" value={formatNumber(totals.comments)} />
+        <StatCard label="Gespeichert" value={formatNumber(totals.saved)} />
+        <StatCard label="Geteilt" value={formatNumber(totals.shares)} />
       </div>
 
       {/* Follower trend — account-level, independent of the post range */}
@@ -188,9 +188,9 @@ export default function OverviewPage() {
 
       {/* Per-post table */}
       <div className="panel rounded p-4 sm:p-6">
-        <h2 className="text-sm font-semibold text-foreground mb-4">Posts</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-4">Beiträge</h2>
         {posts.length === 0 ? (
-          <p className="text-sm text-muted py-8 text-center">No posts found</p>
+          <p className="text-sm text-muted py-8 text-center">Keine Beiträge gefunden</p>
         ) : (
           // Eight metric columns can't compress into a phone; let the table keep
           // its natural width and scroll inside the panel instead.
@@ -198,14 +198,14 @@ export default function OverviewPage() {
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-zinc-500 border-b border-border">
-                  <th className="py-2 pr-4 font-medium">Post</th>
-                  <th className="py-2 px-3 font-medium text-right">Views</th>
-                  <th className="py-2 px-3 font-medium text-right">Reach</th>
+                  <th className="py-2 pr-4 font-medium">Beitrag</th>
+                  <th className="py-2 px-3 font-medium text-right">Aufrufe</th>
+                  <th className="py-2 px-3 font-medium text-right">Reichweite</th>
                   <th className="py-2 px-3 font-medium text-right">Likes</th>
-                  <th className="py-2 px-3 font-medium text-right">Comments</th>
-                  <th className="py-2 px-3 font-medium text-right">Saved</th>
-                  <th className="py-2 px-3 font-medium text-right">Shares</th>
-                  <th className="py-2 pl-3 font-medium text-right">Date</th>
+                  <th className="py-2 px-3 font-medium text-right">Kommentare</th>
+                  <th className="py-2 px-3 font-medium text-right">Gespeichert</th>
+                  <th className="py-2 px-3 font-medium text-right">Geteilt</th>
+                  <th className="py-2 pl-3 font-medium text-right">Datum</th>
                 </tr>
               </thead>
               <tbody>

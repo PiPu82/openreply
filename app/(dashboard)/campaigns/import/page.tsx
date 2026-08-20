@@ -42,7 +42,7 @@ export default function ImportCampaignsPage() {
     setError(null);
     const parsed = parseCsv(csv);
     if (parsed.length === 0) {
-      setError("Paste a CSV with a header row and at least one campaign.");
+      setError("Füge eine CSV mit Kopfzeile und mindestens einer Kampagne ein.");
       return;
     }
 
@@ -85,7 +85,7 @@ export default function ImportCampaignsPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-lg font-semibold">Import campaigns</h1>
+        <h1 className="text-lg font-semibold">Kampagnen importieren</h1>
         <p className="text-sm text-muted mt-1">
           Paste a CSV with one row per campaign. Each row opens in the builder
           prefilled and editable, so you can review it and pick the reel before
@@ -119,7 +119,7 @@ export default function ImportCampaignsPage() {
             value={selectedAccountId}
             onChange={setSelectedAccountId}
             includeAll={false}
-            label="Account"
+            label="Konto"
           />
         </div>
       )}

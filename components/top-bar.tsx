@@ -9,14 +9,14 @@
 import { usePathname } from "next/navigation";
 
 const pageTitles: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/campaigns": "Campaigns",
-  "/campaigns/new": "New Campaign",
-  "/automations": "Campaigns",
-  "/automations/new": "New Campaign",
-  "/logs": "DM Logs",
-  "/settings": "Settings",
-  "/diagnostics": "Diagnostics",
+  "/dashboard": "Übersicht",
+  "/campaigns": "Kampagnen",
+  "/campaigns/new": "Neue Kampagne",
+  "/automations": "Kampagnen",
+  "/automations/new": "Neue Kampagne",
+  "/logs": "DM-Protokoll",
+  "/settings": "Einstellungen",
+  "/diagnostics": "Diagnose",
 };
 
 interface TopBarProps {
@@ -31,7 +31,7 @@ export default function TopBar({
   instagramAccountCount,
 }: TopBarProps) {
   const pathname = usePathname();
-  const title = pageTitles[pathname] ?? "Dashboard";
+  const title = pageTitles[pathname] ?? "Übersicht";
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between gap-3 h-16 px-4 lg:px-8 border-b border-border bg-background">
@@ -39,7 +39,7 @@ export default function TopBar({
         <button
           onClick={onMenuClick}
           className="lg:hidden shrink-0 px-2.5 py-1.5 rounded border border-border text-sm text-muted hover:text-foreground"
-          aria-label="Toggle sidebar"
+          aria-label="Menü ein-/ausblenden"
         >
           Menu
         </button>

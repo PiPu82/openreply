@@ -672,6 +672,54 @@ describe("DM Worker — Full Pipeline", () => {
     );
   });
 
+  it("should deliver both links as buttons after a follow-gate tap", async () => {
+    // The follow gate splits delivery in two: the comment gets a prompt with a
+    // `followcheck:` button, and the links only go out once the tap confirms
+    // the follow. This checks the second half actually carries both links —
+    // the campaign builder offers two, and Meta allows up to three.
+    mockGetUserFollowStatus.mockResolvedValue(true);
+    mockPrisma.automation.findFirst.mockResolvedValue({
+      ...mockAutomation,
+      requireFollow: true,
+      dmMessage: "Hier sind deine Links:",
+      linkButtonLabel: "Merkblatt",
+      trackedLinks: [
+        {
+          slug: "abc123",
+          label: "Merkblatt",
+          destinationUrl: "https://example.com/merkblatt",
+        },
+        {
+          slug: "def456",
+          label: "Termin buchen",
+          destinationUrl: "https://example.com/termin",
+        },
+      ],
+    });
+
+    const processor = getProcessor();
+    await processor(
+      createMockPostbackJob({
+        instagramAccountId: "ig_456",
+        userId: "commenter_999",
+        payload: "followcheck:auto_789",
+      })
+    );
+
+    expect(mockSendDirectMessageWithLinkButton).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "commenter_999",
+      "Hier sind deine Links:",
+      [
+        // First button takes the campaign's linkButtonLabel, each further one
+        // its own stored label.
+        { title: "Merkblatt", url: "http://localhost:3000/r/abc123" },
+        { title: "Termin buchen", url: "http://localhost:3000/r/def456" },
+      ]
+    );
+  });
+
   it("should send the opening DM first (routing to the follow check) when both opening DM and follow-gate are on", async () => {
     mockPrisma.automation.findMany.mockResolvedValue([
       {

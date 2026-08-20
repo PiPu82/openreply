@@ -10,13 +10,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Overview", href: "/overview" },
-  { label: "Inbox", href: "/inbox" },
-  { label: "Campaigns", href: "/campaigns" },
-  { label: "DM Logs", href: "/logs" },
-  { label: "Settings", href: "/settings" },
-  { label: "Diagnostics", href: "/diagnostics" },
+  { label: "Übersicht", href: "/dashboard" },
+  { label: "Auswertung", href: "/overview" },
+  { label: "Posteingang", href: "/inbox" },
+  { label: "Kampagnen", href: "/campaigns" },
+  { label: "DM-Protokoll", href: "/logs" },
+  { label: "Einstellungen", href: "/settings" },
+  { label: "Diagnose", href: "/diagnostics" },
 ];
 
 interface SidebarProps {

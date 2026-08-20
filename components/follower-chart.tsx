@@ -103,7 +103,7 @@ export default function FollowerChart({
           </h2>
           <p className="mt-1 text-sm text-muted">
             {current === null
-              ? "Follower count unavailable"
+              ? "Followerzahl nicht verfügbar"
               : `${current.toLocaleString()} now`}
             {net !== null && (
               <>
@@ -122,18 +122,18 @@ export default function FollowerChart({
             onClick={() => setShowTable((v) => !v)}
             className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-border-hover hover:text-foreground"
           >
-            {showTable ? "Show chart" : "Show table"}
+            {showTable ? "Diagramm anzeigen" : "Tabelle anzeigen"}
           </button>
         )}
       </div>
 
       {data.length < 2 ? (
         <div className="mt-6 rounded border border-border bg-surface/60 p-6 text-center">
-          <p className="text-sm text-foreground">Collecting follower history</p>
+          <p className="text-sm text-foreground">Follower-Verlauf wird gesammelt</p>
           <p className="mt-1 text-sm text-muted">
             {data.length === 0
-              ? "No snapshots recorded yet."
-              : "One day recorded so far."}{" "}
+              ? "Noch keine Messpunkte aufgezeichnet."
+              : "Bisher ein Tag aufgezeichnet."}{" "}
             A point is added daily — the chart appears once there are at least
             two.
           </p>
@@ -144,8 +144,8 @@ export default function FollowerChart({
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-zinc-500">
                 <th className="py-2 pr-4 font-medium">Date</th>
-                <th className="py-2 px-3 font-medium text-right">Followers</th>
-                <th className="py-2 pl-3 font-medium text-right">Change</th>
+                <th className="py-2 px-3 font-medium text-right">Follower</th>
+                <th className="py-2 pl-3 font-medium text-right">Veränderung</th>
               </tr>
             </thead>
             <tbody>

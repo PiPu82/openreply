@@ -148,11 +148,11 @@ export default function DiagnosticsPage() {
               data?.workerHealth.healthy ? "text-success" : "text-warning"
             }`}
           >
-            {data?.workerHealth.healthy ? "Healthy" : "Needs attention"}
+            {data?.workerHealth.healthy ? "Gesund" : "Braucht Aufmerksamkeit"}
           </p>
           <p className="mt-2 text-xs text-muted">
             {workerAgeSeconds == null
-              ? "No heartbeat found"
+              ? "Kein Lebenszeichen gefunden"
               : `Last heartbeat ${workerAgeSeconds}s ago`}
           </p>
         </div>
@@ -168,7 +168,7 @@ export default function DiagnosticsPage() {
         ))}
       </div>
 
-      <Section title="Recent Worker Alerts">
+      <Section title="Letzte Worker-Meldungen">
         {data?.workerAlerts.length ? (
           <div className="space-y-3">
             {data.workerAlerts.map((alert) => (
@@ -192,12 +192,12 @@ export default function DiagnosticsPage() {
             ))}
           </div>
         ) : (
-          <EmptyState label="No worker alerts recorded." />
+          <EmptyState label="Keine Worker-Meldungen aufgezeichnet." />
         )}
       </Section>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="Campaign DM Failures And Skips">
+        <Section title="Fehlgeschlagene und übersprungene DMs">
           {data?.dmFailures.length ? (
             <div className="space-y-3">
               {data.dmFailures.map((item) => (
@@ -218,11 +218,11 @@ export default function DiagnosticsPage() {
               ))}
             </div>
           ) : (
-            <EmptyState label="No DM failures or skips." />
+            <EmptyState label="Keine fehlgeschlagenen oder übersprungenen DMs." />
           )}
         </Section>
 
-        <Section title="Webhook Failures">
+        <Section title="Fehlgeschlagene Webhooks">
           {data?.webhookFailures.length ? (
             <div className="space-y-3">
               {data.webhookFailures.map((event) => (
@@ -231,7 +231,7 @@ export default function DiagnosticsPage() {
                     {event.object ?? "Instagram webhook"}
                   </p>
                   <p className="mt-1 text-xs text-error">
-                    {event.errorMessage ?? "Unknown error"}
+                    {event.errorMessage ?? "Unbekannter Fehler"}
                   </p>
                   <p className="mt-1 text-xs text-muted">
                     {formatDate(event.createdAt)}
@@ -240,13 +240,13 @@ export default function DiagnosticsPage() {
               ))}
             </div>
           ) : (
-            <EmptyState label="No failed webhook events." />
+            <EmptyState label="Keine fehlgeschlagenen Webhook-Ereignisse." />
           )}
         </Section>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Section title="Token Refresh Failures">
+        <Section title="Fehlgeschlagene Token-Erneuerungen">
           {data?.tokenRefreshFailures.length ? (
             <div className="space-y-3">
               {data.tokenRefreshFailures.map((event) => (
@@ -261,13 +261,13 @@ export default function DiagnosticsPage() {
               ))}
             </div>
           ) : (
-            <EmptyState label="No token refresh failures." />
+            <EmptyState label="Keine fehlgeschlagenen Token-Erneuerungen." />
           )}
         </Section>
 
       </div>
 
-      <Section title="Operational Event Timeline">
+      <Section title="Verlauf der Betriebsereignisse">
         {data?.operationalEvents.length ? (
           <div className="space-y-3">
             {data.operationalEvents.map((event) => (
@@ -279,7 +279,7 @@ export default function DiagnosticsPage() {
             ))}
           </div>
         ) : (
-          <EmptyState label="No operational events recorded." />
+          <EmptyState label="Keine Betriebsereignisse aufgezeichnet." />
         )}
       </Section>
     </div>

@@ -65,13 +65,30 @@ interface WebhookEntry {
     recipient?: { id?: string };
     postback?: { mid?: string; title?: string; payload?: string };
     read?: { watermark?: number; seq?: number };
+    timestamp?: number;
     message?: {
       mid?: string;
       text?: string;
       is_echo?: boolean;
       is_deleted?: boolean;
       is_unsupported?: boolean;
-      attachments?: Array<{ type?: string }>;
+      // Note this is not the shape the Conversations API returns for the same
+      // message: webhooks nest the template under payload.generic.elements,
+      // the Graph API exposes it as attachments.data[].generic_template. Two
+      // extractors are needed because of it.
+      attachments?: Array<{
+        type?: string;
+        payload?: {
+          url?: string;
+          generic?: {
+            elements?: Array<{
+              title?: string;
+              subtitle?: string;
+              buttons?: Array<{ type?: string; title?: string; url?: string }>;
+            }>;
+          };
+        };
+      }>;
     };
   }>;
 }
@@ -245,6 +262,137 @@ export function parseReadEvents(payload: WebhookPayload): WebhookReadEvent[] {
         instagramAccountId: accountId,
         userId,
         watermark: messaging.read.watermark,
+      });
+    }
+  }
+
+  return events;
+}
+
+/// A single message in a DM thread, either direction, as delivered by webhook.
+export interface WebhookThreadMessage {
+  /// IGSID of the connected account (webhook entry id).
+  instagramAccountId: string;
+  /// IGSID of the other person — the id the send API takes as recipient.
+  contactId: string;
+  mid: string;
+  fromMe: boolean;
+  text: string;
+  sentAt: Date;
+}
+
+const ATTACHMENT_PLACEHOLDERS: Record<string, string> = {
+  image: "[Bild]",
+  video: "[Video]",
+  audio: "[Sprachnachricht]",
+  file: "[Datei]",
+  share: "[Geteilter Beitrag]",
+  story_mention: "[Story-Erwähnung]",
+  ig_reel: "[Reel]",
+};
+
+/**
+ * Readable text for a webhook message, mirroring what the inbox shows for the
+ * same message fetched from the Graph API: plain text when there is any, the
+ * template title plus its button for our own automated DMs, and a placeholder
+ * for media so an image never renders as an empty row.
+ *
+ * Where the button is a link, its target is included — that target is the
+ * tracked short link, so the thread shows exactly which URL a given person
+ * received.
+ */
+export function webhookMessageText(message: {
+  text?: string;
+  is_deleted?: boolean;
+  is_unsupported?: boolean;
+  attachments?: Array<{
+    type?: string;
+    payload?: {
+      url?: string;
+      generic?: {
+        elements?: Array<{
+          title?: string;
+          subtitle?: string;
+          buttons?: Array<{ type?: string; title?: string; url?: string }>;
+        }>;
+      };
+    };
+  }>;
+}): string {
+  const text = message.text?.trim();
+  if (text) return text;
+
+  const attachment = message.attachments?.[0];
+  if (!attachment) {
+    // Recorded rather than skipped: a gap in the thread is harder to make
+    // sense of later than a message whose content Meta would not hand over.
+    return message.is_unsupported ? "[Nicht unterstützte Nachricht]" : "[Anhang]";
+  }
+
+  const element = attachment.payload?.generic?.elements?.[0];
+  if (element) {
+    const button = element.buttons?.[0];
+    const target = button?.type === "web_url" && button.url ? ` → ${button.url}` : "";
+    return [
+      element.title,
+      element.subtitle,
+      button?.title ? `[${button.title}]${target}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return ATTACHMENT_PLACEHOLDERS[attachment.type ?? ""] ?? "[Anhang]";
+}
+
+/**
+ * Parse every DM in a webhook payload — inbound and outbound alike.
+ *
+ * Unlike parseMessageEvents, which feeds keyword autoreplies and therefore
+ * has to drop echoes, this keeps them: Meta echoes back everything the account
+ * sends, including messages typed in the Instagram app itself, so echoes are
+ * exactly what makes a locally stored thread complete rather than half of a
+ * conversation.
+ *
+ * Deletions are dropped — keeping a message the person removed would put the
+ * inbox at odds with what they see on their side.
+ */
+export function parseThreadMessageEvents(
+  payload: WebhookPayload
+): WebhookThreadMessage[] {
+  const events: WebhookThreadMessage[] = [];
+
+  if (payload.object !== "instagram") return events;
+
+  for (const entry of payload.entry ?? []) {
+    for (const messaging of entry.messaging ?? []) {
+      const message = messaging.message;
+      if (!message || message.is_deleted) continue;
+
+      const mid = message.mid;
+      const senderId = messaging.sender?.id;
+      const recipientId = messaging.recipient?.id;
+      const accountId = entry.id;
+
+      if (!mid || !senderId || !recipientId || !accountId) continue;
+
+      // is_echo is authoritative; the sender comparison covers payloads that
+      // omit the flag.
+      const fromMe = message.is_echo === true || senderId === accountId;
+      const contactId = fromMe ? recipientId : senderId;
+
+      // A thread with the account itself is not a conversation.
+      if (contactId === accountId) continue;
+
+      events.push({
+        instagramAccountId: accountId,
+        contactId,
+        mid,
+        fromMe,
+        text: webhookMessageText(message),
+        // Webhook timestamps are epoch milliseconds. Fall back to the entry's
+        // own time, then to now, so a message is never dated 1970.
+        sentAt: new Date(messaging.timestamp ?? entry.time ?? Date.now()),
       });
     }
   }

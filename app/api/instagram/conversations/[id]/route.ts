@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db/client";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
-import {
-  getConversationMessages,
-  messageDetailText,
-  MetaApiError,
-} from "@/lib/meta/client";
-import { decryptToken } from "@/lib/meta/oauth";
+import { MetaApiError } from "@/lib/meta/client";
 
 export interface ThreadMessage {
   id: string;
@@ -14,6 +10,8 @@ export interface ThreadMessage {
   fromMe: boolean;
   fromUsername: string | null;
   createdTime: string | null;
+  /// When the recipient read it, for messages we sent. Null while unread.
+  readTime?: string | null;
 }
 
 export interface ThreadResponse {
@@ -22,7 +20,11 @@ export interface ThreadResponse {
 
 type RouteProps = { params: Promise<{ id: string }> };
 
-// Message history for a single conversation (20 most recent, chronological).
+// Message history for a single conversation, oldest first.
+//
+// Served from the local store: Meta's Conversations API takes over a second
+// per thread and only ever returns the 20 most recent messages, while the
+// store keeps everything the webhook ever delivered.
 export async function GET(request: NextRequest, { params }: RouteProps) {
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
@@ -46,21 +48,45 @@ export async function GET(request: NextRequest, { params }: RouteProps) {
   }
 
   try {
-    const accessToken = decryptToken(account.accessToken);
-    const raw = await getConversationMessages(accessToken, conversationId);
+    const conversation = await prisma.conversation.findFirst({
+      where: {
+        id: conversationId,
+        workspaceId,
+        instagramAccountId: account.id,
+      },
+      select: { id: true, contactUsername: true },
+    });
 
-    // The API returns newest-first; reverse to read top-to-bottom.
-    const messages: ThreadMessage[] = raw
-      .map((m) => ({
-        id: m.id,
-        // Wie in der Listenansicht: eigene DMs sind Button-Templates und
-        // haben ein leeres message-Feld.
-        text: messageDetailText(m),
-        fromMe: m.from?.id === account.instagramId,
-        fromUsername: m.from?.username ?? null,
-        createdTime: m.created_time ?? null,
-      }))
-      .reverse();
+    if (!conversation) {
+      return NextResponse.json(
+        { success: false, error: "Conversation not found." },
+        { status: 404 }
+      );
+    }
+
+    const stored = await prisma.message.findMany({
+      where: { conversationId: conversation.id },
+      orderBy: { sentAt: "asc" },
+      // Generous, but bounded: a thread this long is already unreadable, and
+      // an unbounded query would be a way to tip the server over.
+      take: 500,
+      select: {
+        id: true,
+        text: true,
+        fromMe: true,
+        sentAt: true,
+        readAt: true,
+      },
+    });
+
+    const messages: ThreadMessage[] = stored.map((m) => ({
+      id: m.id,
+      text: m.text,
+      fromMe: m.fromMe,
+      fromUsername: m.fromMe ? account.username : conversation.contactUsername,
+      createdTime: m.sentAt.toISOString(),
+      readTime: m.readAt?.toISOString() ?? null,
+    }));
 
     const data: ThreadResponse = { messages };
     return NextResponse.json({ success: true, data });

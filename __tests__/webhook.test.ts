@@ -10,6 +10,8 @@ import {
   parseCommentEvents,
   parseMessageEvents,
   parseReadEvents,
+  parseThreadMessageEvents,
+  webhookMessageText,
 } from "../lib/meta/webhook";
 import { createHmac } from "crypto";
 
@@ -453,5 +455,133 @@ describe("parseReadEvents", () => {
     };
 
     expect(parseReadEvents(payload)).toHaveLength(0);
+  });
+});
+
+describe("parseThreadMessageEvents", () => {
+  const ACCOUNT = "17841480535369396";
+  const CONTACT = "1415193703837239";
+
+  function payload(messaging: Record<string, unknown>) {
+    return {
+      object: "instagram",
+      entry: [{ id: ACCOUNT, time: 1787232106599, messaging: [messaging] }],
+    } as Parameters<typeof parseThreadMessageEvents>[0];
+  }
+
+  it("keeps echoes, because they are what makes a stored thread complete", () => {
+    // parseMessageEvents drops these so an autoreply cannot trigger itself.
+    // The inbox needs them: an echo is how Meta reports anything the account
+    // sent, including messages typed in the Instagram app.
+    const events = parseThreadMessageEvents(
+      payload({
+        sender: { id: ACCOUNT },
+        recipient: { id: CONTACT },
+        timestamp: 1787232105654,
+        message: { mid: "mid_out", is_echo: true, text: "Hier ist dein Link" },
+      })
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      instagramAccountId: ACCOUNT,
+      contactId: CONTACT,
+      mid: "mid_out",
+      fromMe: true,
+      text: "Hier ist dein Link",
+    });
+    expect(events[0].sentAt.toISOString()).toBe(
+      new Date(1787232105654).toISOString()
+    );
+  });
+
+  it("reads an inbound message as coming from the contact", () => {
+    const events = parseThreadMessageEvents(
+      payload({
+        sender: { id: CONTACT },
+        recipient: { id: ACCOUNT },
+        timestamp: 1787232105654,
+        message: { mid: "mid_in", text: "Strom" },
+      })
+    );
+
+    expect(events[0]).toMatchObject({
+      contactId: CONTACT,
+      fromMe: false,
+      text: "Strom",
+    });
+  });
+
+  it("drops deleted messages so the inbox agrees with what the person sees", () => {
+    const events = parseThreadMessageEvents(
+      payload({
+        sender: { id: CONTACT },
+        recipient: { id: ACCOUNT },
+        message: { mid: "mid_gone", text: "oops", is_deleted: true },
+      })
+    );
+
+    expect(events).toEqual([]);
+  });
+
+  it("falls back to the entry time when the message carries no timestamp", () => {
+    const events = parseThreadMessageEvents(
+      payload({
+        sender: { id: CONTACT },
+        recipient: { id: ACCOUNT },
+        message: { mid: "mid_no_ts", text: "hallo" },
+      })
+    );
+
+    expect(events[0].sentAt.toISOString()).toBe(
+      new Date(1787232106599).toISOString()
+    );
+  });
+});
+
+describe("webhookMessageText", () => {
+  it("renders a button template as its title, label and link target", () => {
+    // Every automated DM is a button template: the text sits in the attachment,
+    // and the button's URL is the tracked link that person was given.
+    const text = webhookMessageText({
+      attachments: [
+        {
+          type: "template",
+          payload: {
+            generic: {
+              elements: [
+                {
+                  title: "Hier kommt dein Merkblatt",
+                  buttons: [
+                    {
+                      type: "web_url",
+                      title: "Jetzt holen",
+                      url: "https://link.example.com/r/abc",
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(text).toBe(
+      "Hier kommt dein Merkblatt\n[Jetzt holen] → https://link.example.com/r/abc"
+    );
+  });
+
+  it("labels media instead of rendering an empty row", () => {
+    expect(webhookMessageText({ attachments: [{ type: "image" }] })).toBe("[Bild]");
+    expect(webhookMessageText({ attachments: [{ type: "audio" }] })).toBe(
+      "[Sprachnachricht]"
+    );
+  });
+
+  it("prefers plain text over any attachment", () => {
+    expect(
+      webhookMessageText({ text: "  Hallo  ", attachments: [{ type: "image" }] })
+    ).toBe("Hallo");
   });
 });

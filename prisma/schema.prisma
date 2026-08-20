@@ -84,6 +84,8 @@ model Workspace {
   linkClicks        LinkClick[]
   webhookEvents     WebhookEvent[]
   operationalEvents OperationalEvent[]
+  conversations     Conversation[]
+  messages          Message[]
 
   @@index([ownerId])
 }
@@ -141,6 +143,7 @@ model InstagramAccount {
   dmLogs      DmLog[]
   linkClicks  LinkClick[]
   followerSnapshots FollowerSnapshot[]
+  conversations     Conversation[]
 
   @@index([workspaceId])
 }
@@ -385,4 +388,72 @@ enum OperationalEventLevel {
   INFO
   WARNING
   ERROR
+}
+
+/// A DM thread with one person.
+///
+/// Identified by (account, contact) rather than by Meta's conversation id:
+/// webhooks name only the two participants, never the conversation, so the
+/// participants are the only key available at the moment a message arrives.
+/// Meta's own id is recorded when the Graph sync supplies it, purely so the
+/// two views can be lined up.
+model Conversation {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  instagramAccountId String
+  /// IGSID of the other person. Same id the send API expects as recipient.
+  contactId          String
+  /// Webhooks carry no username, only ids — filled in by the Graph sync, or
+  /// from the DM log when the contact arrived through a comment.
+  contactUsername    String?
+  metaConversationId String?
+  lastMessageAt      DateTime?
+  lastMessageText    String?
+  lastMessageFromMe  Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  messages         Message[]
+
+  @@unique([instagramAccountId, contactId])
+  @@index([workspaceId, lastMessageAt])
+}
+
+/// One message in a thread, in either direction.
+///
+/// Meta echoes back every outgoing message — including whatever is typed in
+/// the Instagram app itself — so a thread assembled from webhooks alone is
+/// complete, not just the half this app sent.
+model Message {
+  id             String        @id @default(cuid())
+  conversationId String
+  workspaceId    String
+  /// Meta's message id. Unique so a redelivered webhook, a backfill and the
+  /// Graph sync can all write the same message without duplicating it.
+  mid            String?       @unique
+  fromMe         Boolean
+  text           String
+  sentAt         DateTime
+  /// Set from read receipts, which report a watermark rather than single
+  /// messages: everything sent up to that moment counts as read.
+  readAt         DateTime?
+  source         MessageSource @default(WEBHOOK)
+  createdAt      DateTime      @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, sentAt])
+  @@index([workspaceId, sentAt])
+}
+
+enum MessageSource {
+  /// Live webhook delivery.
+  WEBHOOK
+  /// Reconstructed from stored webhook payloads.
+  BACKFILL
+  /// Fetched from the Conversations API by the sync job.
+  GRAPH
 }

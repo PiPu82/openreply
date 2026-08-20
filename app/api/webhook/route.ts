@@ -6,8 +6,10 @@ import {
   parseMessageEvents,
   parsePostbackEvents,
   parseReadEvents,
+  parseThreadMessageEvents,
   verifyWebhookSignature,
 } from "@/lib/meta/webhook";
+import { applyReadReceipt, recordThreadMessages } from "@/lib/inbox/store";
 import { MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from "@/lib/queue/client";
 import { Prisma } from "@/app/generated/prisma/client";
 
@@ -77,6 +79,35 @@ export async function POST(request: NextRequest) {
       status: "PENDING",
     },
   });
+
+  // Archive every message in the payload before anything else runs. This is
+  // what the inbox reads from, so it must not depend on campaign matching, on
+  // the queue, or on Redis being up.
+  //
+  // Failures are swallowed deliberately: Meta retries any non-200 and drops the
+  // subscription after an hour of failures, which would cost live leads. A
+  // missing thread entry is repaired by the sync job; a disabled subscription
+  // is not repaired by anything.
+  try {
+    const threadMessages = parseThreadMessageEvents(
+      payload as Parameters<typeof parseThreadMessageEvents>[0]
+    );
+    await recordThreadMessages(threadMessages);
+  } catch (error) {
+    console.error("[Webhook] Storing thread messages failed:", error);
+    await prisma.operationalEvent
+      .create({
+        data: {
+          source: "SYSTEM",
+          level: "WARNING",
+          message: "Storing inbox messages failed",
+          payload: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        },
+      })
+      .catch(() => {});
+  }
 
   try {
     const commentEvents = parseCommentEvents(
@@ -184,6 +215,17 @@ export async function POST(request: NextRequest) {
     );
 
     for (const event of readEvents) {
+      // Same receipt, two uses: the inbox marks sent messages as read, the
+      // opening-DM fallback below schedules the reveal.
+      await applyReadReceipt(
+        event.instagramAccountId,
+        event.userId,
+        event.watermark
+      ).catch((error) => {
+        console.error("[Webhook] Applying read receipt failed:", error);
+        return 0;
+      });
+
       const openingLogs = await prisma.dmLog.findMany({
         where: {
           commenterId: event.userId,

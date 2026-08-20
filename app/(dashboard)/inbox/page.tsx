@@ -394,6 +394,9 @@ export default function InboxPage() {
                           }`}
                         >
                           {formatMessageTime(m.createdTime)}
+                          {/* Read receipts only exist for what we sent, and
+                              only once Instagram reports them. */}
+                          {m.fromMe && m.readTime ? " · Gelesen" : ""}
                         </p>
                       </div>
                     </div>

@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db/client";
 import { getCurrentWorkspaceId } from "@/lib/auth";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
-import {
-  getConversations,
-  messagePreviewText,
-  sendDirectMessage,
-  MetaApiError,
-} from "@/lib/meta/client";
+import { sendDirectMessage, MetaApiError } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
+import { recordThreadMessages } from "@/lib/inbox/store";
+import { syncAccountConversations } from "@/lib/inbox/sync";
+
+/**
+ * Accounts with a first-load sync in flight.
+ *
+ * The inbox polls every 12 seconds, so without this the wait for the initial
+ * sync would start a second one, and a third. Process-local on purpose: it
+ * guards a single server's duplicate work, nothing more.
+ */
+const syncing = new Set<string>();
 
 export interface ConversationListItem {
   id: string;
@@ -47,37 +54,65 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const accessToken = decryptToken(account.accessToken);
-    const raw = await getConversations(accessToken, account.instagramId);
-
-    const conversations: ConversationListItem[] = raw.map((c) => {
-      const participants = c.participants?.data ?? [];
-      const contact =
-        participants.find((p) => p.id !== account.instagramId) ??
-        participants[0] ??
-        null;
-      const last = c.messages?.data?.[0] ?? null;
-
-      return {
-        id: c.id,
-        contact: {
-          id: contact?.id ?? "",
-          username: contact?.username ?? null,
-        },
-        updatedTime: c.updated_time ?? null,
-        lastMessage: last
-          ? {
-              // Nicht last.message: bei Button-Templates — also jeder
-              // automatisch versendeten DM — ist das Feld leer, und die Inbox
-              // zeigte "(No text)". messagePreviewText holt dann den Titel
-              // aus dem Attachment.
-              text: messagePreviewText(last),
-              fromMe: last.from?.id === account.instagramId,
-              createdTime: last.created_time ?? null,
-            }
-          : null,
-      };
+    // Read from the local store, not from Meta. The Conversations API needs
+    // 5–9 seconds for this list because it resolves 50 threads on demand;
+    // every one of those messages already arrived by webhook and is on disk.
+    let stored = await prisma.conversation.findMany({
+      where: { workspaceId, instagramAccountId: account.id },
+      orderBy: { lastMessageAt: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        contactId: true,
+        contactUsername: true,
+        lastMessageAt: true,
+        lastMessageText: true,
+        lastMessageFromMe: true,
+        updatedAt: true,
+      },
     });
+
+    // Nothing stored yet — a newly connected account, or the very first load
+    // after this store was introduced. Fetch once, inline, so the inbox is not
+    // simply empty; every later load is served from disk.
+    if (stored.length === 0 && !syncing.has(account.id)) {
+      syncing.add(account.id);
+      try {
+        await syncAccountConversations(account, 10);
+      } catch (error) {
+        console.error("[Conversations] Initial sync failed:", error);
+      } finally {
+        syncing.delete(account.id);
+      }
+
+      stored = await prisma.conversation.findMany({
+        where: { workspaceId, instagramAccountId: account.id },
+        orderBy: { lastMessageAt: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          contactId: true,
+          contactUsername: true,
+          lastMessageAt: true,
+          lastMessageText: true,
+          lastMessageFromMe: true,
+          updatedAt: true,
+        },
+      });
+    }
+
+    const conversations: ConversationListItem[] = stored.map((c) => ({
+      id: c.id,
+      contact: { id: c.contactId, username: c.contactUsername },
+      updatedTime: (c.lastMessageAt ?? c.updatedAt).toISOString(),
+      lastMessage: c.lastMessageAt
+        ? {
+            text: c.lastMessageText ?? "",
+            fromMe: c.lastMessageFromMe,
+            createdTime: c.lastMessageAt.toISOString(),
+          }
+        : null,
+    }));
 
     const data: ConversationsResponse = {
       conversations,
@@ -145,6 +180,27 @@ export async function POST(request: NextRequest) {
       body.recipientId,
       text
     );
+
+    // File the sent message immediately instead of waiting for Meta to echo it
+    // back. The echo does arrive, and the unique message id keeps it from being
+    // stored twice — but it can take a few seconds, and in the meantime the
+    // thread would poll, not find the message, and drop the one the composer
+    // optimistically showed.
+    await recordThreadMessages([
+      {
+        instagramAccountId: account.instagramId,
+        contactId: body.recipientId,
+        mid: result.message_id,
+        fromMe: true,
+        text,
+        sentAt: new Date(),
+      },
+    ]).catch((error) => {
+      // The message did go out; only the local copy failed. Reporting a
+      // failure here would invite a duplicate send.
+      console.error("[Conversations] Storing sent message failed:", error);
+    });
+
     return NextResponse.json({ success: true, data: result });
   } catch (err) {
     console.error("[Conversations] Send error:", err);

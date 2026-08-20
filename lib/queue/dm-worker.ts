@@ -140,6 +140,29 @@ function buildInlineLinkFallback(
   return extraUrls.length > 0 ? `${base}\n${extraUrls.join("\n")}` : base;
 }
 
+type FollowPromptAutomation = {
+  followPromptLinkUrl: string | null;
+  followPromptLinkLabel: string | null;
+};
+
+/**
+ * The link buttons that go in front of a follow prompt's "I'm following" button.
+ *
+ * Asking someone to follow without handing them the profile leaves them to go
+ * find it, which is where they drop out. Configured per campaign rather than
+ * derived from the account, because the destination is a decision — a profile,
+ * a specific post, a landing page — not a lookup.
+ *
+ * Returns nothing when no link is set, which keeps the prompt exactly as it was.
+ */
+function buildFollowPromptLinks(
+  automation: FollowPromptAutomation
+): Array<{ title: string; url: string }> {
+  const url = automation.followPromptLinkUrl?.trim();
+  if (!url) return [];
+  return [{ title: automation.followPromptLinkLabel?.trim() || "Profil öffnen", url }];
+}
+
 type RevealAutomation = {
   dmMessage: string;
   linkButtonLabel: string | null;
@@ -601,7 +624,8 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           commentId,
           promptText,
           automation.followPromptButtonLabel || "i'm following",
-          `followcheck:${automation.id}`
+          `followcheck:${automation.id}`,
+          buildFollowPromptLinks(automation)
         );
       } else if (automation.trackedLinks.length > 0) {
         // Try button template first; if Meta rejects it, fall back to inline links.
@@ -797,7 +821,8 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
           userId,
           promptText,
           automation.followPromptButtonLabel || "i'm following",
-          `followcheck:${automation.id}`
+          `followcheck:${automation.id}`,
+          buildFollowPromptLinks(automation)
         );
       } catch (error) {
         console.log(
@@ -1135,7 +1160,8 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
           senderId,
           promptText,
           automation.followPromptButtonLabel || "I'm following ✅",
-          `followcheck:${automation.id}`
+          `followcheck:${automation.id}`,
+          buildFollowPromptLinks(automation)
         );
       } else {
         await sendRevealDirectMessage(

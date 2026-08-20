@@ -632,10 +632,69 @@ describe("DM Worker — Full Pipeline", () => {
       "comment_555",
       "Follow me first commenter_user, then tap 👇",
       "I'm following ✅",
-      "followcheck:auto_789"
+      "followcheck:auto_789",
+      // Kein Profil-Link gesetzt: die Button-Liste bleibt leer.
+      []
     );
     expect(mockSendPrivateReplyWithLinkButton).not.toHaveBeenCalled();
     expect(mockSendPrivateReply).not.toHaveBeenCalled();
+  });
+
+  it("should put the profile link ahead of the follow button when one is set", async () => {
+    // Asking someone to follow without handing them the profile leaves them to
+    // go find it. Meta takes link and postback buttons in one template, so the
+    // prompt can do both — link first, then the button that continues the flow.
+    mockGetUserFollowStatus.mockResolvedValue(false);
+    mockPrisma.automation.findMany.mockResolvedValue([
+      {
+        ...mockAutomation,
+        requireFollow: true,
+        followPromptMessage: "Folge mir kurz, dann kommt dein Link 👇",
+        followPromptButtonLabel: "Ich folge dir",
+        followPromptLinkUrl: "https://instagram.com/dievermieterente",
+        followPromptLinkLabel: "Profil öffnen",
+      },
+    ]);
+
+    const processor = getProcessor();
+    await processor(createMockJob());
+
+    expect(mockSendPrivateReplyWithButton).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "comment_555",
+      "Folge mir kurz, dann kommt dein Link 👇",
+      "Ich folge dir",
+      "followcheck:auto_789",
+      [{ title: "Profil öffnen", url: "https://instagram.com/dievermieterente" }]
+    );
+  });
+
+  it("should leave the prompt untouched when no profile link is set", async () => {
+    mockGetUserFollowStatus.mockResolvedValue(false);
+    mockPrisma.automation.findMany.mockResolvedValue([
+      {
+        ...mockAutomation,
+        requireFollow: true,
+        followPromptMessage: "Folge mir kurz 👇",
+        followPromptButtonLabel: "Ich folge dir",
+        followPromptLinkUrl: null,
+        followPromptLinkLabel: null,
+      },
+    ]);
+
+    const processor = getProcessor();
+    await processor(createMockJob());
+
+    expect(mockSendPrivateReplyWithButton).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "comment_555",
+      "Folge mir kurz 👇",
+      "Ich folge dir",
+      "followcheck:auto_789",
+      []
+    );
   });
 
   it("should skip the prompt and send the link when the commenter already follows", async () => {
@@ -1130,7 +1189,9 @@ describe("DM Worker — DM keyword trigger", () => {
       "commenter_999",
       expect.any(String),
       "I'm following ✅",
-      "followcheck:auto_789"
+      "followcheck:auto_789",
+      // Kein Profil-Link gesetzt: die Button-Liste bleibt leer.
+      []
     );
     expect(mockSendDirectMessage).not.toHaveBeenCalled();
   });

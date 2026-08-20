@@ -193,6 +193,12 @@ model Automation {
   requireFollow           Boolean @default(false)
   followPromptMessage     String?
   followPromptButtonLabel String?
+  /// Optional link button shown ahead of the "I'm following" button, so the
+  /// prompt can send someone to the profile they are being asked to follow
+  /// instead of leaving them to find it. Meta allows link and postback buttons
+  /// in the same template.
+  followPromptLinkUrl     String?
+  followPromptLinkLabel   String?
   followUpEnabled Boolean @default(false)
   followUpMessage String?
   // Minutes to wait after the link is delivered before sending the follow-up.

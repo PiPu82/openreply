@@ -45,6 +45,8 @@ interface LoadedCampaign {
   requireFollow: boolean;
   followPromptMessage: string | null;
   followPromptButtonLabel: string | null;
+  followPromptLinkUrl: string | null;
+  followPromptLinkLabel: string | null;
   followUpEnabled: boolean;
   followUpMessage: string | null;
   followUpDelayMinutes: number | null;
@@ -175,6 +177,8 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const [secondaryButtonLabel, setSecondaryButtonLabel] = useState("Open link");
   const [requireFollow, setRequireFollow] = useState(false);
   const [followPromptMessage, setFollowPromptMessage] = useState("");
+  const [followPromptLinkUrl, setFollowPromptLinkUrl] = useState("");
+  const [followPromptLinkLabel, setFollowPromptLinkLabel] = useState("");
   const [followPromptButtonLabel, setFollowPromptButtonLabel] =
     useState("i'm following");
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
@@ -285,6 +289,8 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         setFollowPromptButtonLabel(
           c.followPromptButtonLabel ?? "i'm following"
         );
+        setFollowPromptLinkUrl(c.followPromptLinkUrl ?? "");
+        setFollowPromptLinkLabel(c.followPromptLinkLabel ?? "");
         setFollowUpEnabled(c.followUpEnabled ?? false);
         setFollowUpMessage(c.followUpMessage ?? "");
         setFollowUpDelayMinutes(c.followUpDelayMinutes ?? 0);
@@ -421,6 +427,12 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       secondaryButtonLabel: secondaryButtonLabel.trim() || "Open link",
       requireFollow,
       followPromptMessage: requireFollow ? followPromptMessage.trim() : "",
+      followPromptLinkUrl: requireFollow
+        ? followPromptLinkUrl.trim() || null
+        : null,
+      followPromptLinkLabel: requireFollow
+        ? followPromptLinkLabel.trim() || null
+        : null,
       followPromptButtonLabel: requireFollow
         ? followPromptButtonLabel.trim() || "i'm following"
         : "",
@@ -852,10 +864,30 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                   className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
                   maxLength={20}
                 />
+                <div className="rounded-lg border border-border p-2">
+                  <p className="mb-2 text-xs text-muted">
+                    Optionaler Button <strong>vor</strong> dem Folge-Button —
+                    führt direkt zum Profil, damit niemand es selbst suchen muss.
+                    Leer lassen, wenn nur der Folge-Button erscheinen soll.
+                  </p>
+                  <input
+                    value={followPromptLinkUrl}
+                    onChange={(e) => setFollowPromptLinkUrl(e.target.value)}
+                    placeholder={`https://instagram.com/${username}`}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  />
+                  <input
+                    value={followPromptLinkLabel}
+                    onChange={(e) => setFollowPromptLinkLabel(e.target.value)}
+                    placeholder="Profil öffnen"
+                    maxLength={20}
+                    className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+                  />
+                </div>
                 <p className="text-xs text-muted">
-                  We send the link only after they tap the button and Instagram
-                  confirms the follow. If it can&apos;t be verified, we send it
-                  anyway.
+                  Der Link geht erst raus, wenn die Person den Folge-Button
+                  antippt und Instagram das Folgen bestätigt. Lässt es sich nicht
+                  prüfen, senden wir ihn trotzdem.
                 </p>
               </div>
             )}
@@ -1008,6 +1040,11 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             requireFollow={requireFollow}
             followPromptMessage={followPromptMessage}
             followPromptButtonLabel={followPromptButtonLabel || "i'm following"}
+            followPromptLinkLabel={
+              followPromptLinkUrl.trim()
+                ? followPromptLinkLabel.trim() || "Profil öffnen"
+                : undefined
+            }
             followUpEnabled={followUpEnabled}
             followUpMessage={followUpMessage}
             followUpDelayMinutes={followUpDelayMinutes}

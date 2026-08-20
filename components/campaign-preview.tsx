@@ -37,6 +37,9 @@ interface CampaignPreviewProps {
   requireFollow: boolean;
   followPromptMessage: string;
   followPromptButtonLabel: string;
+  /// Set only when a profile link button is configured; it renders ahead of the
+  /// follow button, in the same order Meta will show them.
+  followPromptLinkLabel?: string;
   followUpEnabled: boolean;
   followUpMessage: string;
   followUpDelayMinutes?: number;
@@ -317,6 +320,7 @@ function DmScreen({
   requireFollow,
   followPromptMessage,
   followPromptButtonLabel,
+  followPromptLinkLabel,
   followUpEnabled,
   followUpMessage,
   followUpDelayMinutes = 0,
@@ -337,6 +341,9 @@ function DmScreen({
   requireFollow: boolean;
   followPromptMessage: string;
   followPromptButtonLabel: string;
+  /// Set only when a profile link button is configured; it renders ahead of the
+  /// follow button, in the same order Meta will show them.
+  followPromptLinkLabel?: string;
   followUpEnabled: boolean;
   followUpMessage: string;
   followUpDelayMinutes?: number;
@@ -391,6 +398,11 @@ function DmScreen({
                   {followPromptMessage ||
                     "quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over"}
                 </p>
+                {followPromptLinkLabel && (
+                  <div className="mx-1.5 mb-1 rounded-xl bg-zinc-700 px-4 py-1.5 text-center text-sm font-medium text-white">
+                    {followPromptLinkLabel}
+                  </div>
+                )}
                 <div className="mx-1.5 mb-1.5 rounded-xl bg-zinc-700 px-4 py-1.5 text-center text-sm font-medium text-white">
                   {followPromptButtonLabel || "i'm following"}
                 </div>
@@ -523,6 +535,7 @@ export default function CampaignPreview(props: CampaignPreviewProps) {
             requireFollow={props.requireFollow}
             followPromptMessage={props.followPromptMessage}
             followPromptButtonLabel={props.followPromptButtonLabel}
+            followPromptLinkLabel={props.followPromptLinkLabel}
             followUpEnabled={props.followUpEnabled}
             followUpMessage={props.followUpMessage}
             followUpDelayMinutes={props.followUpDelayMinutes}
@@ -545,6 +558,7 @@ export default function CampaignPreview(props: CampaignPreviewProps) {
             requireFollow={props.requireFollow}
             followPromptMessage={props.followPromptMessage}
             followPromptButtonLabel={props.followPromptButtonLabel}
+            followPromptLinkLabel={props.followPromptLinkLabel}
             followUpEnabled={props.followUpEnabled}
             followUpMessage={props.followUpMessage}
             followUpDelayMinutes={props.followUpDelayMinutes}

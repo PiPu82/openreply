@@ -177,7 +177,13 @@ export async function sendPrivateReplyWithButton(
   commentId: string,
   text: string,
   buttonTitle: string,
-  payload: string
+  payload: string,
+  /**
+   * Link buttons placed ahead of the postback button. Meta accepts both types
+   * in one template, which is what lets a follow prompt carry the profile link
+   * next to the button that continues the flow.
+   */
+  leadingLinks: Array<{ title: string; url: string }> = []
 ): Promise<{ recipient_id: string; message_id: string }> {
   const response = await fetch(
     `${instagramGraphBase()}/${instagramAccountId}/messages`,
@@ -196,7 +202,14 @@ export async function sendPrivateReplyWithButton(
               template_type: "button",
               // Button template text is capped at 640 chars by Meta.
               text: text.slice(0, 640),
+              // Three is Meta's ceiling for a button template, and the postback
+              // is the one that must survive — it is what continues the flow.
               buttons: [
+                ...leadingLinks.slice(0, 2).map((link) => ({
+                  type: "web_url",
+                  title: link.title.slice(0, 20),
+                  url: link.url,
+                })),
                 { type: "postback", title: buttonTitle.slice(0, 20), payload },
               ],
             },
@@ -220,7 +233,13 @@ export async function sendDirectMessageWithButton(
   userId: string,
   text: string,
   buttonTitle: string,
-  payload: string
+  payload: string,
+  /**
+   * Link buttons placed ahead of the postback button. Meta accepts both types
+   * in one template, which is what lets a follow prompt carry the profile link
+   * next to the button that continues the flow.
+   */
+  leadingLinks: Array<{ title: string; url: string }> = []
 ): Promise<{ recipient_id: string; message_id: string }> {
   const response = await fetch(
     `${instagramGraphBase()}/${instagramAccountId}/messages`,
@@ -238,7 +257,14 @@ export async function sendDirectMessageWithButton(
             payload: {
               template_type: "button",
               text: text.slice(0, 640),
+              // Three is Meta's ceiling for a button template, and the postback
+              // is the one that must survive — it is what continues the flow.
               buttons: [
+                ...leadingLinks.slice(0, 2).map((link) => ({
+                  type: "web_url",
+                  title: link.title.slice(0, 20),
+                  url: link.url,
+                })),
                 { type: "postback", title: buttonTitle.slice(0, 20), payload },
               ],
             },

@@ -217,11 +217,10 @@ export async function POST(request: NextRequest) {
     for (const event of readEvents) {
       // Same receipt, two uses: the inbox marks sent messages as read, the
       // opening-DM fallback below schedules the reveal.
-      await applyReadReceipt(
-        event.instagramAccountId,
-        event.userId,
-        event.watermark
-      ).catch((error) => {
+      await applyReadReceipt(event.instagramAccountId, event.userId, {
+        mid: event.mid,
+        watermark: event.watermark,
+      }).catch((error) => {
         console.error("[Webhook] Applying read receipt failed:", error);
         return 0;
       });

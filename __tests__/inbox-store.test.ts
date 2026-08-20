@@ -14,7 +14,11 @@ const { mockPrisma } = vi.hoisted(() => ({
     instagramAccount: { findMany: vi.fn() },
     dmLog: { findFirst: vi.fn() },
     conversation: { upsert: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
-    message: { createMany: vi.fn(), updateMany: vi.fn() },
+    message: {
+      createMany: vi.fn(),
+      updateMany: vi.fn(),
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -108,39 +112,71 @@ describe("recordThreadMessages", () => {
 });
 
 describe("applyReadReceipt", () => {
+  const SEEN_AT = new Date("2026-08-20T11:00:00Z");
+
   beforeEach(() => {
     mockPrisma.conversation.findUnique.mockResolvedValue({ id: "conv_1" });
     mockPrisma.message.updateMany.mockResolvedValue({ count: 2 });
+    mockPrisma.message.findUnique.mockResolvedValue({ sentAt: SEEN_AT });
   });
 
-  it("marks everything we sent up to the watermark as read", async () => {
-    // Instagram reports a moment, not message ids: everything sent at or
-    // before it has been seen.
-    const watermark = Date.parse("2026-08-20T11:00:00Z");
-
-    const count = await applyReadReceipt(ACCOUNT_IGSID, CONTACT, watermark);
+  it("marks everything sent up to the message Instagram names as read", async () => {
+    // Instagram identifies the last seen message by id — the Messenger-style
+    // watermark timestamp is documented but never actually sent. The receipt
+    // still means a cut-off, so it resolves to that message's own time.
+    const count = await applyReadReceipt(ACCOUNT_IGSID, CONTACT, {
+      mid: "mid_seen",
+    });
 
     expect(count).toBe(2);
+    expect(mockPrisma.message.findUnique).toHaveBeenCalledWith({
+      where: { mid: "mid_seen" },
+      select: { sentAt: true },
+    });
     expect(mockPrisma.message.updateMany).toHaveBeenCalledWith({
       where: {
         conversationId: "conv_1",
         fromMe: true,
         readAt: null,
-        sentAt: { lte: new Date(watermark) },
+        sentAt: { lte: SEEN_AT },
       },
-      data: { readAt: new Date(watermark) },
+      data: { readAt: SEEN_AT },
     });
   });
 
-  it("does nothing without a watermark", async () => {
-    expect(await applyReadReceipt(ACCOUNT_IGSID, CONTACT, undefined)).toBe(0);
+  it("still honours a watermark if one ever arrives", async () => {
+    const watermark = Date.parse("2026-08-20T12:00:00Z");
+
+    await applyReadReceipt(ACCOUNT_IGSID, CONTACT, { watermark });
+
+    expect(mockPrisma.message.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.message.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { readAt: new Date(watermark) } })
+    );
+  });
+
+  it("ignores a receipt for a message that was never stored", async () => {
+    // No stored message means no timestamp, and inventing one would mark
+    // unrelated messages as read.
+    mockPrisma.message.findUnique.mockResolvedValue(null);
+
+    expect(
+      await applyReadReceipt(ACCOUNT_IGSID, CONTACT, { mid: "mid_unknown" })
+    ).toBe(0);
+    expect(mockPrisma.message.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for an empty receipt", async () => {
+    expect(await applyReadReceipt(ACCOUNT_IGSID, CONTACT, {})).toBe(0);
     expect(mockPrisma.message.updateMany).not.toHaveBeenCalled();
   });
 
   it("does nothing for a thread that was never stored", async () => {
     mockPrisma.conversation.findUnique.mockResolvedValue(null);
 
-    expect(await applyReadReceipt(ACCOUNT_IGSID, CONTACT, 1787232105654)).toBe(0);
+    expect(
+      await applyReadReceipt(ACCOUNT_IGSID, CONTACT, { mid: "mid_seen" })
+    ).toBe(0);
     expect(mockPrisma.message.updateMany).not.toHaveBeenCalled();
   });
 });

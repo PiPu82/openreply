@@ -64,7 +64,10 @@ interface WebhookEntry {
     sender?: { id?: string };
     recipient?: { id?: string };
     postback?: { mid?: string; title?: string; payload?: string };
-    read?: { watermark?: number; seq?: number };
+    // Instagram reports the last message seen by id. `watermark` is the
+    // Messenger shape and does not appear on Instagram payloads — kept only
+    // because Meta documents both under the same event name.
+    read?: { mid?: string; watermark?: number; seq?: number };
     timestamp?: number;
     message?: {
       mid?: string;
@@ -110,6 +113,9 @@ export interface WebhookPostbackEvent {
 export interface WebhookReadEvent {
   instagramAccountId: string;
   userId: string;
+  /// Id of the last message the person has seen — what Instagram actually sends.
+  mid?: string;
+  /// Messenger-style timestamp. Never populated by Instagram in practice.
   watermark?: number;
 }
 
@@ -261,6 +267,7 @@ export function parseReadEvents(payload: WebhookPayload): WebhookReadEvent[] {
       events.push({
         instagramAccountId: accountId,
         userId,
+        mid: messaging.read.mid,
         watermark: messaging.read.watermark,
       });
     }

@@ -146,16 +146,20 @@ export async function recordThreadMessages(
 /**
  * Apply a read receipt.
  *
- * Meta reports reads as a watermark — a moment up to which everything has been
- * seen — not as individual message ids, so this marks every unread outgoing
- * message sent at or before it.
+ * Instagram reports the last message the person has seen by id; the
+ * Messenger-style `watermark` timestamp is documented under the same event but
+ * never actually sent. Either way the meaning is a cut-off rather than a single
+ * message, so everything unread we sent up to that point is marked read.
+ *
+ * A receipt for a message we never stored is ignored: without its timestamp
+ * there is no cut-off to apply, and guessing one would mark the wrong messages.
  */
 export async function applyReadReceipt(
   instagramAccountIgsid: string,
   contactId: string,
-  watermark: number | undefined
+  receipt: { mid?: string; watermark?: number }
 ): Promise<number> {
-  if (!watermark) return 0;
+  if (!receipt.mid && !receipt.watermark) return 0;
 
   const accounts = await resolveAccounts([instagramAccountIgsid]);
   const account = accounts.get(instagramAccountIgsid);
@@ -172,7 +176,20 @@ export async function applyReadReceipt(
   });
   if (!conversation) return 0;
 
-  const readAt = new Date(watermark);
+  let readAt: Date | null = receipt.watermark
+    ? new Date(receipt.watermark)
+    : null;
+
+  if (!readAt && receipt.mid) {
+    const seen = await prisma.message.findUnique({
+      where: { mid: receipt.mid },
+      select: { sentAt: true },
+    });
+    readAt = seen?.sentAt ?? null;
+  }
+
+  if (!readAt) return 0;
+
   const result = await prisma.message.updateMany({
     where: {
       conversationId: conversation.id,

@@ -66,7 +66,7 @@ export async function backfillInboxFromWebhookEvents(
         result.receipts += await applyReadReceipt(
           read.instagramAccountId,
           read.userId,
-          read.watermark
+          { mid: read.mid, watermark: read.watermark }
         );
       }
     }

@@ -87,9 +87,9 @@ export default function ImportCampaignsPage() {
       <div>
         <h1 className="text-lg font-semibold">Kampagnen importieren</h1>
         <p className="text-sm text-muted mt-1">
-          Paste a CSV with one row per campaign. Each row opens in the builder
-          prefilled and editable, so you can review it and pick the reel before
-          saving. Required columns are{" "}
+          Füge eine CSV mit einer Zeile je Kampagne ein. Jede Zeile öffnet sich
+          vorbelegt und änderbar im Editor, sodass du sie prüfen und das Reel
+          wählen kannst, bevor du speicherst. Pflichtspalten sind{" "}
           <code className="text-accent">keywords</code> and{" "}
           <code className="text-accent">dm_message</code>. Optional:{" "}
           <code className="text-accent">name</code>,{" "}
@@ -112,7 +112,7 @@ export default function ImportCampaignsPage() {
       {accounts.length > 1 && (
         <div className="space-y-2">
           <label className="block text-sm font-medium text-foreground">
-            Instagram account
+            Instagram-Konto
           </label>
           <AccountSelect
             accounts={accounts}
@@ -138,7 +138,7 @@ export default function ImportCampaignsPage() {
           onClick={() => setCsv(SAMPLE)}
           className="text-xs text-muted hover:text-foreground"
         >
-          Fill with a sample
+          Mit einem Beispiel füllen
         </button>
       </div>
 

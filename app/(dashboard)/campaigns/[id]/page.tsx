@@ -136,7 +136,7 @@ export default function CampaignDetailPage() {
           onClick={() => router.push("/campaigns")}
           className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
         >
-          Back to campaigns
+          Zurück zu den Kampagnen
         </button>
       </div>
     );

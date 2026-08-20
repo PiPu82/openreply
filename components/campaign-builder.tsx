@@ -556,7 +556,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           onClick={() => router.push("/campaigns")}
           className="mt-4 rounded border border-border px-4 py-2 text-sm text-muted hover:text-foreground"
         >
-          Back to campaigns
+          Zurück zu den Kampagnen
         </button>
       </div>
     );
@@ -567,11 +567,11 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       {importQueue && (
         <div className="rounded border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
           <span className="font-medium text-foreground">
-            Importing {importTotal - importQueue.length + 1} of {importTotal}.
+            Import {importTotal - importQueue.length + 1} von {importTotal}.
           </span>{" "}
           <span className="text-muted">
-            Fields are prefilled from your CSV. Pick the reel, edit anything, and
-            save to load the next one — or Skip if you don&rsquo;t want this one.
+            Die Felder sind aus deiner CSV vorbelegt. Wähle das Reel, ändere was
+            du möchtest, und speichere, um das nächste zu laden — oder überspringe es.
           </span>
         </div>
       )}
@@ -615,7 +615,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 disabled={saving}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
               >
-                Stop
+                Stoppen
               </button>
             ) : (
               <button
@@ -624,7 +624,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 disabled={saving}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50"
               >
-                Go Live
+                Live schalten
               </button>
             ))}
           <button
@@ -682,7 +682,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             checked={triggerScope === "specific"}
             onSelect={() => setTriggerScope("specific")}
           >
-            a specific post or reel
+            einem bestimmten Beitrag oder Reel
           </Radio>
           {triggerScope === "specific" && (
             <div className="rounded-lg border border-border p-2">
@@ -698,13 +698,13 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             checked={triggerScope === "any"}
             onSelect={() => setTriggerScope("any")}
           >
-            any post or reel
+            jedem Beitrag oder Reel
           </Radio>
           <Radio
             checked={triggerScope === "next"}
             onSelect={() => setTriggerScope("next")}
           >
-            next post or reel
+            dem nächsten Beitrag oder Reel
           </Radio>
         </Section>
 
@@ -713,7 +713,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             checked={matchMode === "specific"}
             onSelect={() => setMatchMode("specific")}
           >
-            a specific word or words
+            ein bestimmtes Wort oder mehrere
           </Radio>
           {matchMode === "specific" && (
             <div className="space-y-1">
@@ -730,7 +730,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             checked={matchMode === "any"}
             onSelect={() => setMatchMode("any")}
           >
-            any word
+            jedes beliebige Wort
           </Radio>
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
             <span className="text-sm text-foreground">
@@ -751,7 +751,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           )}
           <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
             <span className="text-sm text-foreground">
-              reply to their comments under the post
+              eine öffentliche Antwort unter dem Kommentar
             </span>
             <Toggle
               on={publicReplyEnabled}
@@ -840,7 +840,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           <div className="mt-3 rounded-lg border border-border p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">
-                a follow requirement first
+                erst folgen müssen
               </span>
               <Toggle
                 on={requireFollow}
@@ -963,7 +963,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
           <div className="mt-3 rounded-lg border border-border p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">
-                a follow-up thank-you message
+                eine Dankesnachricht im Anschluss
               </span>
               <Toggle
                 on={followUpEnabled}
@@ -995,7 +995,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                     className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-accent/40 focus:outline-none"
                   />
                   <span className="text-xs text-muted">
-                    minutes after the link
+                    Minuten nach dem Link
                   </span>
                 </div>
                 <p className="text-xs text-muted">

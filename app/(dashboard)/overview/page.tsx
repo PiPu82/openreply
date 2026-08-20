@@ -93,7 +93,7 @@ export default function OverviewPage() {
             href="/api/instagram/connect"
             className="mt-4 inline-block text-sm text-accent hover:underline"
           >
-            Connect Instagram
+            Instagram verbinden
           </a>
         )}
       </div>
@@ -168,7 +168,7 @@ export default function OverviewPage() {
             href="/api/instagram/connect"
             className="mt-3 inline-block text-sm text-accent hover:underline"
           >
-            Reconnect Instagram
+            Instagram neu verbinden
           </a>
         </div>
       )}

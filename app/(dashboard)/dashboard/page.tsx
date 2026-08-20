@@ -101,7 +101,7 @@ export default function DashboardPage() {
             {stats?.contactsCount === 1 ? "contact" : "contacts"}
             {" · "}
             <a href="/logs" className="text-accent hover:underline">
-              See activity
+              Aktivität ansehen
             </a>
           </p>
         </div>

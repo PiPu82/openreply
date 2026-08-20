@@ -145,7 +145,7 @@ export default function PostPicker({
           {usedPostIds && Object.keys(usedPostIds).length > 0 && (
             <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted">
               <span className="inline-block h-2.5 w-2.5 rounded-sm border border-warning/50" />
-              Already used
+              Bereits belegt
             </p>
           )}
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 overflow-y-auto p-1">
@@ -206,7 +206,7 @@ export default function PostPicker({
             )}
             {isSelected && (
               <span className="absolute bottom-0 inset-x-0 bg-accent text-white text-xs py-1">
-                Selected
+                Ausgewählt
               </span>
             )}
           </button>

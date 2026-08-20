@@ -124,7 +124,7 @@ export default function DiagnosticsPage() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Production Diagnostics
+            Betriebsdiagnose
           </h1>
           <p className="mt-1 text-sm text-muted">
             Health, queues, webhook failures, billing events, and worker alerts.
@@ -141,7 +141,7 @@ export default function DiagnosticsPage() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
         <div className="panel rounded p-4 sm:p-5">
           <p className="text-xs font-semibold uppercase text-muted">
-            Worker health
+            Zustand des Workers
           </p>
           <p
             className={`mt-3 text-2xl font-bold ${

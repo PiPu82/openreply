@@ -170,7 +170,7 @@ export default function LogsPage() {
               {!loading && logs.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center text-muted sm:px-6">
-                    No logs found
+                    Keine Einträge gefunden
                   </td>
                 </tr>
               )}

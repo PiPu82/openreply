@@ -144,7 +144,7 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm font-medium text-foreground">Status</p>
               <p className="text-xs text-muted mt-0.5">
-                Comment webhooks and private replies depend on this connection.
+                Kommentar-Webhooks und private Antworten hängen an dieser Verbindung.
               </p>
             </div>
             <span
@@ -174,7 +174,7 @@ export default function SettingsPage() {
           <div className="space-y-3 py-3">
             {accounts.length === 0 && (
               <p className="text-sm text-muted">
-                Connect an Instagram professional account to launch campaigns.
+                Verbinde ein professionelles Instagram-Konto, um Kampagnen zu starten.
               </p>
             )}
             {accounts.map((account) => (
@@ -242,7 +242,7 @@ export default function SettingsPage() {
         {membersData?.invitations.length ? (
           <div className="mt-6 border-t border-border pt-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Pending invites
+              Offene Einladungen
             </p>
             <div className="space-y-3">
               {membersData.invitations.map((invitation) => (

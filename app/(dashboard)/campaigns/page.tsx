@@ -381,7 +381,7 @@ export default function CampaignsPage() {
             href="/campaigns/new"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-accent text-sm font-semibold text-white hover:bg-accent-hover transition-colors"
           >
-            Create Campaign
+            Kampagne anlegen
           </Link>
         </div>
       )}
@@ -389,7 +389,7 @@ export default function CampaignsPage() {
       {/* No matches for the current filter */}
       {automations.length > 0 && filtered.length === 0 && (
         <div className="panel rounded p-8 text-center text-sm text-muted">
-          No campaigns match your search.
+          Keine Kampagne passt zu deiner Suche.
         </div>
       )}
 
@@ -464,12 +464,12 @@ export default function CampaignsPage() {
                   </span>
                   {auto.pendingNextReel && (
                     <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-warning">
-                      Waiting for next reel
+                      Wartet auf nächstes Reel
                     </span>
                   )}
                   {auto.requireFollow && (
                     <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                      Follow gate
+                      Folgen nötig
                     </span>
                   )}
                   {auto.trackedLinks.length >= 2 && (
@@ -626,7 +626,7 @@ export default function CampaignsPage() {
                   rel="noreferrer"
                   className="text-zinc-300 hover:text-white"
                 >
-                  Open on Instagram
+                  Auf Instagram öffnen
                 </a>
               )}
               <button

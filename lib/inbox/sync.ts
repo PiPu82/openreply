@@ -21,7 +21,7 @@
 
 import { prisma } from "@/lib/db/client";
 import {
-  getContactFollowStatus,
+  getContactProfile,
   getConversationMessages,
   getConversations,
   messageDetailText,
@@ -72,12 +72,12 @@ async function refreshFollowStatus(
     },
     orderBy: { lastMessageAt: "desc" },
     take: FOLLOW_CHECKS_PER_RUN,
-    select: { id: true, contactId: true },
+    select: { id: true, contactId: true, contactUsername: true },
   });
 
   let checked = 0;
   for (const thread of threads) {
-    const status = await getContactFollowStatus(token, thread.contactId);
+    const status = await getContactProfile(token, thread.contactId);
     // A failed lookup returns nulls; stamping the time anyway would mean
     // retrying it on every single run.
     if (status.contactFollowsUs === null && status.weFollowContact === null) {
@@ -90,6 +90,12 @@ async function refreshFollowStatus(
         contactFollowsUs: status.contactFollowsUs,
         weFollowContact: status.weFollowContact,
         followStatusAt: new Date(),
+        // Comes along in the same call, so a thread from someone who never
+        // commented — and therefore never appeared in the DM log under a
+        // handle — stops showing a bare number.
+        ...(thread.contactUsername || !status.username
+          ? {}
+          : { contactUsername: status.username }),
       },
     });
     checked += 1;

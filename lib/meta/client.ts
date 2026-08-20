@@ -284,37 +284,47 @@ export async function sendDirectMessageWithButton(
  * false, or `null` when Meta does not return the field — so callers can decide
  * how to treat the unverifiable case.
  */
-export interface ContactFollowStatus {
+export interface ContactProfile {
   /// The contact follows the connected account.
   contactFollowsUs: boolean | null;
   /// The connected account follows the contact.
   weFollowContact: boolean | null;
+  /// Their handle. Webhooks carry ids only, so for anyone who never commented
+  /// this is the only way to learn it.
+  username: string | null;
 }
 
 /**
- * Both follow directions for one contact, in a single call.
+ * Handle and both follow directions for one contact, in a single call.
  *
  * Instagram sorts messages into the inbox or into message requests depending on
  * who follows whom, and exposes no field for the folder itself. These two flags
  * are that same fact one step earlier: a contact who follows us receives our DM
  * in their inbox, and a contact we do not follow lands in our requests folder —
  * the one that gets overlooked.
+ *
+ * Only works for contacts who have an open conversation with the account.
+ * Without one Meta answers `code 230: User consent is required to access user
+ * profile` — the interaction itself is the consent. That is why this is called
+ * for threads, and never to look up a stranger's id.
  */
-export async function getContactFollowStatus(
+export async function getContactProfile(
   accessToken: string,
   contactId: string
-): Promise<ContactFollowStatus> {
+): Promise<ContactProfile> {
   const url = new URL(`${instagramGraphBase()}/${contactId}`);
   url.searchParams.set(
     "fields",
-    "is_user_follow_business,is_business_follow_user"
+    "username,is_user_follow_business,is_business_follow_user"
   );
 
   try {
     const response = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (!response.ok) return { contactFollowsUs: null, weFollowContact: null };
+    if (!response.ok) {
+      return { contactFollowsUs: null, weFollowContact: null, username: null };
+    }
     const data = await response.json();
     return {
       contactFollowsUs:
@@ -325,11 +335,12 @@ export async function getContactFollowStatus(
         typeof data?.is_business_follow_user === "boolean"
           ? data.is_business_follow_user
           : null,
+      username: typeof data?.username === "string" ? data.username : null,
     };
   } catch {
     // Never fatal: this only enriches the inbox, and a thread without the flags
     // simply shows nothing rather than blocking anything.
-    return { contactFollowsUs: null, weFollowContact: null };
+    return { contactFollowsUs: null, weFollowContact: null, username: null };
   }
 }
 

@@ -413,6 +413,16 @@ model Conversation {
   /// from the DM log when the contact arrived through a comment.
   contactUsername    String?
   metaConversationId String?
+  /// Whether the contact follows the account. Decides where our DM lands for
+  /// them: a follower gets it in their inbox, everyone else in message requests.
+  contactFollowsUs   Boolean?
+  /// Whether the account follows the contact. Decides where THEIR reply lands
+  /// for us — anything from someone we do not follow goes to requests, which is
+  /// the folder that gets missed.
+  weFollowContact    Boolean?
+  /// When the two flags above were last fetched. They change over time, and a
+  /// stale answer is worse than none.
+  followStatusAt     DateTime?
   lastMessageAt      DateTime?
   lastMessageText    String?
   lastMessageFromMe  Boolean   @default(false)

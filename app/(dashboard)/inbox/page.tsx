@@ -63,6 +63,16 @@ const STATE_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
     label: "Zugestellt, ungelesen",
     hint: "Gesendet, aber Instagram meldet sie bis heute nicht als gelesen",
   },
+  {
+    value: "in_requests",
+    label: "Liegt in Anfragen",
+    hint: "Die Antwort liegt in Instagram unter „Anfragen“, weil wir der Person nicht folgen — dort wird sie leicht übersehen",
+  },
+  {
+    value: "follows_us",
+    label: "Folgt uns",
+    hint: "Unsere DMs landen bei dieser Person im normalen Posteingang, nicht in den Anfragen",
+  },
 ];
 
 function buildQuery(accountId: string, filters: InboxFilterState): string {
@@ -702,6 +712,13 @@ export default function InboxPage() {
                     @{active.contact.username ?? "unbekannt"}
                   </span>
                   <span className="block truncate text-[11px] font-normal text-muted">
+                    {/* Wo eine Nachricht landet, entscheidet sich daran, wer
+                        wem folgt — einen Ordner liefert Instagram nicht mit. */}
+                    {active.follow.weFollowContact === false &&
+                    !active.lastMessage?.fromMe
+                      ? "In Anfragen · "
+                      : ""}
+                    {active.follow.contactFollowsUs === true ? "folgt uns · " : ""}
                     {active.automation
                       ? [
                           active.automation.name,

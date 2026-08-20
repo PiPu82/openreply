@@ -83,6 +83,9 @@ export interface ConversationListItem {
   /// Which campaign brought this contact in, if any. Null means they wrote in
   /// by themselves — no automation ever reached them.
   automation: ThreadAutomationInfo | null;
+  /// Who follows whom, which is what decides the Instagram folder a message
+  /// lands in. Null until the sync has checked this contact.
+  follow: { contactFollowsUs: boolean | null; weFollowContact: boolean | null };
 }
 
 export interface ConversationsResponse {
@@ -100,6 +103,8 @@ const THREAD_STATES: ThreadState[] = [
   "awaiting_reply",
   "dm_failed",
   "delivered_unread",
+  "in_requests",
+  "follows_us",
   "all",
 ];
 
@@ -168,6 +173,8 @@ export async function GET(request: NextRequest) {
         lastMessageText: true,
         lastMessageFromMe: true,
         updatedAt: true,
+        contactFollowsUs: true,
+        weFollowContact: true,
       },
     });
 
@@ -197,6 +204,8 @@ export async function GET(request: NextRequest) {
           lastMessageText: true,
           lastMessageFromMe: true,
           updatedAt: true,
+          contactFollowsUs: true,
+          weFollowContact: true,
         },
       });
     } else {
@@ -221,6 +230,10 @@ export async function GET(request: NextRequest) {
               createdTime: c.lastMessageAt.toISOString(),
             }
           : null,
+        follow: {
+          contactFollowsUs: c.contactFollowsUs,
+          weFollowContact: c.weFollowContact,
+        },
         automation: automation
           ? {
               id: automation.id,

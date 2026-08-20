@@ -23,6 +23,12 @@ export type ThreadState =
   | "awaiting_reply"
   | "dm_failed"
   | "delivered_unread"
+  /// Their reply sits in Instagram's requests folder, because the account does
+  /// not follow them back. Instagram exposes no field for the folder itself —
+  /// this is the condition that puts a message there.
+  | "in_requests"
+  /// The contact follows the account, so our DMs reach their normal inbox.
+  | "follows_us"
   | "all";
 
 export interface InboxFilters {
@@ -129,6 +135,17 @@ export async function buildInboxQuery(
     // The last thing said came from them. lastMessageFromMe is maintained on
     // every write, so this needs no subquery.
     and.push({ lastMessageFromMe: false });
+  }
+
+  if (filters.state === "in_requests") {
+    // Only meaningful once they have written: an outbound-only thread is not
+    // sitting in anyone's requests folder.
+    and.push({ weFollowContact: false });
+    and.push({ messages: { some: { fromMe: false } } });
+  }
+
+  if (filters.state === "follows_us") {
+    and.push({ contactFollowsUs: true });
   }
 
   if (filters.state === "delivered_unread") {

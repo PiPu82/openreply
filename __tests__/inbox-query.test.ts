@@ -134,6 +134,30 @@ describe("buildInboxQuery", () => {
     expect(conditions(where)).toContainEqual({ contactId: { in: [] } });
   });
 
+  it("finds threads whose reply sits in Instagram's requests folder", async () => {
+    // Instagram exposes no field for the folder. What puts a message there is
+    // the account not following the sender, so that is what gets matched — and
+    // only once they have actually written.
+    const { where } = await buildInboxQuery(WS, ACCOUNT, {
+      state: "in_requests",
+    });
+
+    expect(conditions(where)).toContainEqual({ weFollowContact: false });
+    expect(conditions(where)).toContainEqual({
+      messages: { some: { fromMe: false } },
+    });
+  });
+
+  it("finds contacts who follow the account", async () => {
+    const { where } = await buildInboxQuery(WS, ACCOUNT, {
+      state: "follows_us",
+    });
+
+    expect(conditions(where)).toContainEqual({ contactFollowsUs: true });
+    // Follow filters say nothing about automations, so no DmLog lookup.
+    expect(mockPrisma.dmLog.findMany).not.toHaveBeenCalled();
+  });
+
   it("requires a sent message before calling a thread unread", async () => {
     // Without that, threads where nothing was ever sent would count as
     // "delivered but unread".

@@ -8,13 +8,53 @@ import { recordThreadMessages } from "@/lib/inbox/store";
 import { syncAccountConversations } from "@/lib/inbox/sync";
 
 /**
- * Accounts with a first-load sync in flight.
+ * Accounts with a sync in flight.
  *
- * The inbox polls every 12 seconds, so without this the wait for the initial
- * sync would start a second one, and a third. Process-local on purpose: it
- * guards a single server's duplicate work, nothing more.
+ * The inbox polls every 12 seconds, so without this one slow sync would start
+ * a second one, and a third. Process-local on purpose: it guards a single
+ * server's duplicate work, nothing more.
  */
 const syncing = new Set<string>();
+
+/** When each account was last reconciled with Meta, to keep that rare. */
+const lastSyncedAt = new Map<string, number>();
+
+const BACKGROUND_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Reconcile with Meta behind the response, not in front of it.
+ *
+ * Webhooks are what keep the store current, but a delivery can be missed while
+ * the stack restarts, and Meta does not redeliver forever. Before this store
+ * existed every click went to Meta and such a gap could not happen; now it has
+ * to be closed deliberately.
+ *
+ * Deliberately not awaited: the whole point of reading locally is that nobody
+ * waits several seconds for Meta. Anything this recovers appears on the next
+ * poll, twelve seconds later.
+ */
+function syncInBackground(account: {
+  id: string;
+  workspaceId: string;
+  instagramId: string;
+  accessToken: string;
+}): void {
+  const since = Date.now() - (lastSyncedAt.get(account.id) ?? 0);
+  if (since < BACKGROUND_SYNC_INTERVAL_MS || syncing.has(account.id)) return;
+
+  // Claim the slot before starting, or the polls arriving during the sync
+  // would each start their own.
+  lastSyncedAt.set(account.id, Date.now());
+  syncing.add(account.id);
+
+  void syncAccountConversations(account, 10)
+    .catch((error) => {
+      console.error("[Conversations] Background sync failed:", error);
+    })
+    .finally(() => {
+      syncing.delete(account.id);
+    });
+}
 
 export interface ConversationListItem {
   id: string;
@@ -77,6 +117,7 @@ export async function GET(request: NextRequest) {
     // simply empty; every later load is served from disk.
     if (stored.length === 0 && !syncing.has(account.id)) {
       syncing.add(account.id);
+      lastSyncedAt.set(account.id, Date.now());
       try {
         await syncAccountConversations(account, 10);
       } catch (error) {
@@ -99,6 +140,8 @@ export async function GET(request: NextRequest) {
           updatedAt: true,
         },
       });
+    } else {
+      syncInBackground(account);
     }
 
     const conversations: ConversationListItem[] = stored.map((c) => ({

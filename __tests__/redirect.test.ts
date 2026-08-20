@@ -19,6 +19,7 @@ import { GET } from "../app/r/[slug]/route";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("tracked link redirect route", () => {
@@ -63,18 +64,21 @@ describe("tracked link redirect route", () => {
     });
   });
 
-  it("redirects unknown slugs to the homepage without logging a click", async () => {
+  it("redirects unknown slugs to the configured public origin, not the address the request arrived on", async () => {
+    // Behind a tunnel or reverse proxy the standalone server sees its own bind
+    // address, so deriving the homepage from the request sent visitors to
+    // https://0.0.0.0:3000/. The origin has to come from NEXTAUTH_URL instead —
+    // this asserts the request URL is ignored even when it looks like a host.
     mockPrisma.trackedLink.findUnique.mockResolvedValue(null);
+    vi.stubEnv("NEXTAUTH_URL", "https://link.example.com");
 
     const response = await GET(
-      new Request("https://manychat-alternative.com/r/missing") as Parameters<
-        typeof GET
-      >[0],
+      new Request("https://0.0.0.0:3000/r/missing") as Parameters<typeof GET>[0],
       { params: Promise.resolve({ slug: "missing" }) }
     );
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("https://manychat-alternative.com/");
+    expect(response.headers.get("location")).toBe("https://link.example.com/");
     expect(mockPrisma.linkClick.create).not.toHaveBeenCalled();
   });
 });

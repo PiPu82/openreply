@@ -11,14 +11,23 @@
  */
 
 import { prisma } from "@/lib/db/client";
-import { parseReadEvents, parseThreadMessageEvents } from "@/lib/meta/webhook";
-import { applyReadReceipt, recordThreadMessages } from "./store";
+import {
+  parseDeletedMessageIds,
+  parseReadEvents,
+  parseThreadMessageEvents,
+} from "@/lib/meta/webhook";
+import {
+  applyReadReceipt,
+  recordThreadMessages,
+  removeDeletedMessages,
+} from "./store";
 
 export interface BackfillResult {
   events: number;
   stored: number;
   conversations: number;
   receipts: number;
+  deleted: number;
 }
 
 export async function backfillInboxFromWebhookEvents(
@@ -29,6 +38,7 @@ export async function backfillInboxFromWebhookEvents(
     stored: 0,
     conversations: 0,
     receipts: 0,
+    deleted: 0,
   };
 
   let cursor: string | undefined;
@@ -61,6 +71,12 @@ export async function backfillInboxFromWebhookEvents(
       );
       result.stored += stored.stored;
       result.conversations += stored.conversations;
+
+      // Replayed in order, so a message stored by an earlier payload is
+      // removed again when its deletion comes up.
+      result.deleted += await removeDeletedMessages(
+        parseDeletedMessageIds(payload)
+      );
 
       for (const read of parseReadEvents(payload)) {
         result.receipts += await applyReadReceipt(

@@ -353,6 +353,28 @@ export function webhookMessageText(message: {
 }
 
 /**
+ * Message ids Meta reports as deleted.
+ *
+ * When someone unsends a message, Meta delivers `{ mid, is_deleted: true }` —
+ * the id and nothing else, no text. The message itself has to be looked up
+ * locally and removed; there is nothing in the event to store.
+ */
+export function parseDeletedMessageIds(payload: WebhookPayload): string[] {
+  const ids: string[] = [];
+
+  if (payload.object !== "instagram") return ids;
+
+  for (const entry of payload.entry ?? []) {
+    for (const messaging of entry.messaging ?? []) {
+      const message = messaging.message;
+      if (message?.is_deleted && message.mid) ids.push(message.mid);
+    }
+  }
+
+  return ids;
+}
+
+/**
  * Parse every DM in a webhook payload — inbound and outbound alike.
  *
  * Unlike parseMessageEvents, which feeds keyword autoreplies and therefore
@@ -361,8 +383,9 @@ export function webhookMessageText(message: {
  * exactly what makes a locally stored thread complete rather than half of a
  * conversation.
  *
- * Deletions are dropped — keeping a message the person removed would put the
- * inbox at odds with what they see on their side.
+ * Deletions are skipped here because the event carries no content to store;
+ * they are handled by parseDeletedMessageIds, which removes the message that
+ * was already saved.
  */
 export function parseThreadMessageEvents(
   payload: WebhookPayload

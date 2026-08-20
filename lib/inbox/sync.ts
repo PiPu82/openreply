@@ -11,6 +11,12 @@
  *
  * Runs on a schedule rather than on page load: it costs several seconds per
  * account, which is precisely the wait the local store exists to avoid.
+ *
+ * Note this pass only ever adds. Deletions arrive as their own webhook and are
+ * applied there; inferring them here — treating anything Meta did not return as
+ * deleted — would be unsafe, because Meta returns only the 20 most recent
+ * messages per thread. A quiet omission would silently destroy history rather
+ * than repair it.
  */
 
 import { prisma } from "@/lib/db/client";

@@ -18,13 +18,20 @@ const { mockPrisma } = vi.hoisted(() => ({
       createMany: vi.fn(),
       updateMany: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      deleteMany: vi.fn(),
     },
   },
 }));
 
 vi.mock("@/lib/db/client", () => ({ prisma: mockPrisma }));
 
-import { applyReadReceipt, recordThreadMessages } from "../lib/inbox/store";
+import {
+  applyReadReceipt,
+  recordThreadMessages,
+  removeDeletedMessages,
+} from "../lib/inbox/store";
 
 const ACCOUNT_IGSID = "17841480535369396";
 const CONTACT = "1415193703837239";
@@ -178,5 +185,67 @@ describe("applyReadReceipt", () => {
       await applyReadReceipt(ACCOUNT_IGSID, CONTACT, { mid: "mid_seen" })
     ).toBe(0);
     expect(mockPrisma.message.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("removeDeletedMessages", () => {
+  beforeEach(() => {
+    mockPrisma.message.findMany.mockResolvedValue([
+      { id: "msg_1", conversationId: "conv_1" },
+    ]);
+    mockPrisma.message.deleteMany.mockResolvedValue({ count: 1 });
+    mockPrisma.message.findFirst.mockResolvedValue({
+      sentAt: new Date("2026-08-19T10:00:00Z"),
+      text: "vorherige Nachricht",
+      fromMe: false,
+    });
+  });
+
+  it("deletes the message and re-points the thread preview at what remains", async () => {
+    // Someone unsending a message expects it gone. Leaving the preview quoting
+    // it would keep the deleted text visible in the list.
+    const count = await removeDeletedMessages(["mid_deleted"]);
+
+    expect(count).toBe(1);
+    expect(mockPrisma.message.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["msg_1"] } },
+    });
+    expect(mockPrisma.conversation.update).toHaveBeenCalledWith({
+      where: { id: "conv_1" },
+      data: {
+        lastMessageAt: new Date("2026-08-19T10:00:00Z"),
+        lastMessageText: "vorherige Nachricht",
+        lastMessageFromMe: false,
+      },
+    });
+  });
+
+  it("clears the summary when the thread is left empty", async () => {
+    // A thread still holding a timestamp would float at the top of the inbox
+    // with nothing to show.
+    mockPrisma.message.findFirst.mockResolvedValue(null);
+
+    await removeDeletedMessages(["mid_deleted"]);
+
+    expect(mockPrisma.conversation.update).toHaveBeenCalledWith({
+      where: { id: "conv_1" },
+      data: {
+        lastMessageAt: null,
+        lastMessageText: null,
+        lastMessageFromMe: false,
+      },
+    });
+  });
+
+  it("does nothing for a message that was never stored", async () => {
+    mockPrisma.message.findMany.mockResolvedValue([]);
+
+    expect(await removeDeletedMessages(["mid_unknown"])).toBe(0);
+    expect(mockPrisma.message.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for an empty list", async () => {
+    expect(await removeDeletedMessages([])).toBe(0);
+    expect(mockPrisma.message.findMany).not.toHaveBeenCalled();
   });
 });

@@ -13,7 +13,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import { readCache, writeCache } from "@/lib/client-cache";
-import type { ConversationListItem } from "@/app/api/instagram/conversations/route";
+import type {
+  ConversationListItem,
+  ConversationsResponse,
+} from "@/app/api/instagram/conversations/route";
 import type { ThreadMessage } from "@/app/api/instagram/conversations/[id]/route";
 
 const POLL_MS = 12_000;
@@ -22,6 +25,60 @@ const POLL_MS = 12_000;
 // so this is what makes the inbox feel fast after the first load.
 const CACHE_MAX_AGE_MS = 60_000;
 const convCacheKey = (accountId: string) => `inbox:convs:${accountId}`;
+
+// Typing should not fire a request per keystroke.
+const SEARCH_DEBOUNCE_MS = 300;
+
+interface InboxFilterState {
+  q: string;
+  from: string;
+  to: string;
+  automation: string;
+  keyword: string;
+  state: string;
+}
+
+const EMPTY_FILTERS: InboxFilterState = {
+  q: "",
+  from: "",
+  to: "",
+  automation: "",
+  keyword: "",
+  state: "",
+};
+
+const STATE_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
+  {
+    value: "awaiting_reply",
+    label: "Awaiting reply",
+    hint: "They wrote last and nobody has answered",
+  },
+  {
+    value: "dm_failed",
+    label: "DM failed",
+    hint: "Instagram refused the DM — only the public reply got through",
+  },
+  {
+    value: "delivered_unread",
+    label: "Delivered, unread",
+    hint: "Sent, but Instagram has never reported it as read",
+  },
+];
+
+function buildQuery(accountId: string, filters: InboxFilterState): string {
+  const params = new URLSearchParams({ instagramAccountId: accountId });
+  if (filters.q.trim()) params.set("q", filters.q.trim());
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  if (filters.automation) params.set("automation", filters.automation);
+  if (filters.keyword) params.set("keyword", filters.keyword);
+  if (filters.state) params.set("state", filters.state);
+  return params.toString();
+}
+
+function countActiveFilters(filters: InboxFilterState): number {
+  return Object.values(filters).filter((v) => v !== "").length;
+}
 const msgCacheKey = (conversationId: string) => `inbox:msgs:${conversationId}`;
 
 function formatTime(iso: string | null): string {
@@ -71,6 +128,19 @@ export default function InboxPage() {
   const [convLoading, setConvLoading] = useState(true);
   const [convError, setConvError] = useState<string | null>(null);
 
+  // What the user typed, and what the last request used. The search box updates
+  // the first immediately and the second only after a pause.
+  const [filters, setFilters] = useState<InboxFilterState>(EMPTY_FILTERS);
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<
+    ConversationsResponse["filters"]
+  >({ automations: [], keywords: [] });
+  const [awaitingReply, setAwaitingReply] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<"export" | "delete" | null>(null);
+
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -111,19 +181,38 @@ export default function InboxPage() {
     window.sessionStorage.setItem("inbox:selectedAccount", selectedAccountId);
   }, [selectedAccountId]);
 
+  // Debounce the search box: every keystroke would otherwise be a query with a
+  // leading-wildcard match across every message.
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedQ(filters.q),
+      SEARCH_DEBOUNCE_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [filters.q]);
+
   const loadConversations = useCallback(
     async (silent: boolean) => {
       if (!selectedAccountId) return;
       if (!silent) setConvLoading(true);
+      const query = buildQuery(selectedAccountId, {
+        ...filters,
+        q: debouncedQ,
+      });
       try {
-        const res = await fetch(
-          `/api/instagram/conversations?instagramAccountId=${selectedAccountId}`,
-          { cache: "no-store" }
-        );
+        const res = await fetch(`/api/instagram/conversations?${query}`, {
+          cache: "no-store",
+        });
         const data = await res.json();
         if (data.success) {
           setConversations(data.data.conversations);
-          writeCache(convCacheKey(selectedAccountId), data.data.conversations);
+          setFilterOptions(data.data.filters);
+          setAwaitingReply(data.data.counts.awaitingReply);
+          // Only the unfiltered list is worth caching — a cached filtered view
+          // would be painted under a different filter on the next visit.
+          if (countActiveFilters({ ...filters, q: debouncedQ }) === 0) {
+            writeCache(convCacheKey(selectedAccountId), data.data.conversations);
+          }
           setConvError(null);
         } else if (!silent) {
           setConvError(data.error ?? "Failed to load conversations");
@@ -131,21 +220,24 @@ export default function InboxPage() {
       } catch {
         if (!silent) setConvError("Failed to load conversations");
       } finally {
-        if (!silent) setConvLoading(false);
+        // Always cleared, including on silent loads: a filter change reloads
+        // silently, and an initial "Loading…" would otherwise never resolve.
+        setConvLoading(false);
       }
     },
-    [selectedAccountId]
+    [selectedAccountId, filters, debouncedQ]
   );
 
-  // Load + poll conversations for the selected account. A cached list is shown
-  // immediately (so revisits are instant) while a fresh copy loads silently.
+  // Switching accounts starts over: different threads, and the filters of the
+  // previous account rarely mean anything for the next one.
   useEffect(() => {
     if (!selectedAccountId) return;
-    // Reset the open thread when switching accounts. This is an intentional
-    // synchronous reset on a dependency change, not derived render state.
+    // Intentional synchronous reset on a dependency change, not derived render
+    // state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveId(null);
     setMessages([]);
+    setFilters(EMPTY_FILTERS);
     const cached = readCache<ConversationListItem[]>(
       convCacheKey(selectedAccountId),
       CACHE_MAX_AGE_MS
@@ -157,7 +249,16 @@ export default function InboxPage() {
       setConversations([]);
       setConvLoading(true);
     }
-    void loadConversations(Boolean(cached.data));
+  }, [selectedAccountId]);
+
+  // Load and keep polling. Deliberately separate from the reset above, so
+  // changing a filter re-queries without closing the thread being read.
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    // Fetching on mount and on every filter change is what this effect is for;
+    // the state it settles is the loaded list, not render-derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadConversations(true);
     const timer = window.setInterval(() => void loadConversations(true), POLL_MS);
     return () => window.clearInterval(timer);
   }, [selectedAccountId, loadConversations]);
@@ -272,6 +373,87 @@ export default function InboxPage() {
     }
   }
 
+  /**
+   * Force a reconcile with Meta.
+   *
+   * Not needed to see new messages — webhooks deliver those — but it answers
+   * "is something missing?" without waiting for the background pass.
+   */
+  async function handleRefresh() {
+    if (!selectedAccountId || refreshing) return;
+    setRefreshing(true);
+    setRefreshNote(null);
+    try {
+      const res = await fetch("/api/instagram/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instagramAccountId: selectedAccountId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const added = data.data.messages as number;
+        setRefreshNote(
+          added > 0 ? `${added} message(s) recovered` : "Already up to date"
+        );
+        await loadConversations(true);
+        if (activeId) await loadMessages(activeId, true);
+      } else {
+        setRefreshNote(data.error ?? "Refresh failed");
+      }
+    } catch {
+      setRefreshNote("Refresh failed");
+    } finally {
+      setRefreshing(false);
+      window.setTimeout(() => setRefreshNote(null), 4000);
+    }
+  }
+
+  /** Download everything stored about this contact, for a subject access request. */
+  function handleExport() {
+    if (!activeId || !selectedAccountId) return;
+    setBusyAction("export");
+    window.location.href = `/api/instagram/conversations/${activeId}/export?instagramAccountId=${selectedAccountId}`;
+    window.setTimeout(() => setBusyAction(null), 1500);
+  }
+
+  /** Erase this contact, for a deletion request. */
+  async function handleDelete() {
+    if (!activeId || !selectedAccountId || busyAction) return;
+
+    const who = active?.contact.username
+      ? `@${active.contact.username}`
+      : "this contact";
+    const confirmed = window.confirm(
+      `Delete everything stored about ${who}?\n\n` +
+        "This removes the conversation, its messages and the automation log " +
+        "entries naming them. It cannot be undone.\n\n" +
+        "The conversation itself stays in Instagram — only this app's copy is erased."
+    );
+    if (!confirmed) return;
+
+    setBusyAction("delete");
+    try {
+      const res = await fetch(
+        `/api/instagram/conversations/${activeId}?instagramAccountId=${selectedAccountId}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (data.success) {
+        setActiveId(null);
+        setMessages([]);
+        await loadConversations(true);
+      } else {
+        setSendError(data.error ?? "Delete failed");
+      }
+    } catch {
+      setSendError("Delete failed");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  const activeFilterCount = countActiveFilters(filters);
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -301,8 +483,144 @@ export default function InboxPage() {
             active ? "hidden" : "flex"
           }`}
         >
-          <div className="shrink-0 border-b border-border px-4 py-3 text-sm font-semibold text-foreground">
-            Conversations
+          <div className="shrink-0 space-y-2 border-b border-border px-3 py-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="search"
+                value={filters.q}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, q: e.target.value }))
+                }
+                placeholder="Search names and messages…"
+                className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1.5 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => void handleRefresh()}
+                disabled={refreshing}
+                title="Check Meta for anything missing"
+                aria-label="Refresh"
+                className="shrink-0 rounded border border-border px-2 py-1.5 text-sm text-muted hover:text-foreground disabled:opacity-50"
+              >
+                {refreshing ? "…" : "⟳"}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((open) => !open)}
+                className="rounded px-1 py-0.5 text-muted hover:text-foreground"
+              >
+                Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}{" "}
+                {filtersOpen ? "▴" : "▾"}
+              </button>
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters(EMPTY_FILTERS)}
+                  className="rounded px-1 py-0.5 text-muted hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {filtersOpen && (
+              <div className="space-y-2 pt-1">
+                <div className="flex flex-wrap gap-1">
+                  {STATE_OPTIONS.map((option) => {
+                    const on = filters.state === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        title={option.hint}
+                        onClick={() =>
+                          setFilters((f) => ({
+                            ...f,
+                            state: on ? "" : option.value,
+                          }))
+                        }
+                        className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                          on
+                            ? "border-accent bg-accent text-white"
+                            : "border-border text-muted hover:text-foreground"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <input
+                    type="date"
+                    value={filters.from}
+                    onChange={(e) =>
+                      setFilters((f) => ({ ...f, from: e.target.value }))
+                    }
+                    aria-label="From date"
+                    className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent/40 focus:outline-none"
+                  />
+                  <span className="text-xs text-muted">to</span>
+                  <input
+                    type="date"
+                    value={filters.to}
+                    onChange={(e) =>
+                      setFilters((f) => ({ ...f, to: e.target.value }))
+                    }
+                    aria-label="To date"
+                    className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent/40 focus:outline-none"
+                  />
+                </div>
+
+                <select
+                  value={filters.automation}
+                  onChange={(e) =>
+                    setFilters((f) => ({ ...f, automation: e.target.value }))
+                  }
+                  aria-label="Automation"
+                  className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent/40 focus:outline-none"
+                >
+                  <option value="">Any automation</option>
+                  {/* The two that are not a campaign: reached by something, and
+                      reached by nothing — the latter being people who wrote in
+                      on their own. */}
+                  <option value="any">Reached by an automation</option>
+                  <option value="none">No automation (wrote in themselves)</option>
+                  {filterOptions.automations.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+
+                {filterOptions.keywords.length > 0 && (
+                  <select
+                    value={filters.keyword}
+                    onChange={(e) =>
+                      setFilters((f) => ({ ...f, keyword: e.target.value }))
+                    }
+                    aria-label="Keyword"
+                    className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-foreground focus:border-accent/40 focus:outline-none"
+                  >
+                    <option value="">Any keyword</option>
+                    {filterOptions.keywords.map((k) => (
+                      <option key={k} value={k}>
+                        {k}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            <p className="text-[11px] text-muted">
+              {refreshNote ??
+                `${conversations.length} shown · ${awaitingReply} awaiting reply`}
+            </p>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {convLoading ? (
@@ -337,6 +655,21 @@ export default function InboxPage() {
                         {c.lastMessage.text || "(no text)"}
                       </p>
                     )}
+                    <p className="mt-1 truncate text-[10px] text-zinc-500">
+                      {c.automation ? (
+                        <>
+                          {c.automation.name}
+                          {c.automation.matchedKeyword
+                            ? ` · ${c.automation.matchedKeyword}`
+                            : ""}
+                          {/* Worth calling out: these people got the public
+                              reply but never the DM. */}
+                          {c.automation.status === "FAILED" ? " · DM failed" : ""}
+                        </>
+                      ) : (
+                        "No automation"
+                      )}
+                    </p>
                   </button>
                 );
               })
@@ -364,9 +697,43 @@ export default function InboxPage() {
                 >
                   Back
                 </button>
-                <span className="truncate">
-                  @{active.contact.username ?? "unknown"}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate">
+                    @{active.contact.username ?? "unknown"}
+                  </span>
+                  <span className="block truncate text-[11px] font-normal text-muted">
+                    {active.automation
+                      ? [
+                          active.automation.name,
+                          active.automation.matchedKeyword,
+                          active.automation.status === "FAILED"
+                            ? "DM failed"
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "Wrote in without an automation"}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={busyAction !== null}
+                  title="Download everything stored about this contact"
+                  className="shrink-0 rounded border border-border px-2 py-1 text-xs font-normal text-muted hover:text-foreground disabled:opacity-50"
+                >
+                  Export
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete()}
+                  disabled={busyAction !== null}
+                  title="Erase this contact from this app"
+                  className="shrink-0 rounded border border-border px-2 py-1 text-xs font-normal text-error hover:bg-error/10 disabled:opacity-50"
+                >
+                  {busyAction === "delete" ? "Deleting…" : "Delete"}
+                </button>
               </div>
 
               <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
@@ -396,7 +763,7 @@ export default function InboxPage() {
                           {formatMessageTime(m.createdTime)}
                           {/* Read receipts only exist for what we sent, and
                               only once Instagram reports them. */}
-                          {m.fromMe && m.readTime ? " · Gelesen" : ""}
+                          {m.fromMe && m.readTime ? " · Read" : ""}
                         </p>
                       </div>
                     </div>

@@ -201,3 +201,57 @@ export async function applyReadReceipt(
   });
   return result.count;
 }
+
+/**
+ * Remove messages that were unsent.
+ *
+ * Someone deleting a message expects it gone — an inbox that still shows it
+ * would be a copy of something the other person has withdrawn, which is both
+ * wrong and, for the person who deleted it, not what they were promised by the
+ * app they deleted it in.
+ *
+ * When the deleted message was the newest in its thread, the thread summary is
+ * recomputed from what is left, so the inbox preview does not keep quoting it.
+ */
+export async function removeDeletedMessages(mids: string[]): Promise<number> {
+  if (mids.length === 0) return 0;
+
+  const doomed = await prisma.message.findMany({
+    where: { mid: { in: mids } },
+    select: { id: true, conversationId: true },
+  });
+  if (doomed.length === 0) return 0;
+
+  const affected = new Set(doomed.map((m) => m.conversationId));
+
+  const result = await prisma.message.deleteMany({
+    where: { id: { in: doomed.map((m) => m.id) } },
+  });
+
+  for (const conversationId of affected) {
+    const newest = await prisma.message.findFirst({
+      where: { conversationId },
+      orderBy: { sentAt: "desc" },
+      select: { sentAt: true, text: true, fromMe: true },
+    });
+
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: newest
+        ? {
+            lastMessageAt: newest.sentAt,
+            lastMessageText: newest.text,
+            lastMessageFromMe: newest.fromMe,
+          }
+        : // Nothing left. Keeping a timestamp would leave the thread floating
+          // at the top of the inbox with an empty preview.
+          {
+            lastMessageAt: null,
+            lastMessageText: null,
+            lastMessageFromMe: false,
+          },
+    });
+  }
+
+  return result.count;
+}

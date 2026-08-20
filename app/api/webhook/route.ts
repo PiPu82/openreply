@@ -6,10 +6,15 @@ import {
   parseMessageEvents,
   parsePostbackEvents,
   parseReadEvents,
+  parseDeletedMessageIds,
   parseThreadMessageEvents,
   verifyWebhookSignature,
 } from "@/lib/meta/webhook";
-import { applyReadReceipt, recordThreadMessages } from "@/lib/inbox/store";
+import {
+  applyReadReceipt,
+  recordThreadMessages,
+  removeDeletedMessages,
+} from "@/lib/inbox/store";
 import { MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from "@/lib/queue/client";
 import { Prisma } from "@/app/generated/prisma/client";
 
@@ -93,6 +98,13 @@ export async function POST(request: NextRequest) {
       payload as Parameters<typeof parseThreadMessageEvents>[0]
     );
     await recordThreadMessages(threadMessages);
+
+    // An unsent message has to disappear here too, not just in Instagram.
+    await removeDeletedMessages(
+      parseDeletedMessageIds(
+        payload as Parameters<typeof parseDeletedMessageIds>[0]
+      )
+    );
   } catch (error) {
     console.error("[Webhook] Storing thread messages failed:", error);
     await prisma.operationalEvent

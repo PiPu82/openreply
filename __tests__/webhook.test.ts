@@ -10,6 +10,7 @@ import {
   parseCommentEvents,
   parseMessageEvents,
   parseReadEvents,
+  parseDeletedMessageIds,
   parseThreadMessageEvents,
   webhookMessageText,
 } from "../lib/meta/webhook";
@@ -583,5 +584,51 @@ describe("webhookMessageText", () => {
     expect(
       webhookMessageText({ text: "  Hallo  ", attachments: [{ type: "image" }] })
     ).toBe("Hallo");
+  });
+});
+
+describe("parseDeletedMessageIds", () => {
+  it("picks out unsent messages by id", () => {
+    // Meta sends the id and nothing else — no text, no attachments — so the
+    // message can only be found in our own store.
+    const ids = parseDeletedMessageIds({
+      object: "instagram",
+      entry: [
+        {
+          id: "17841480535369396",
+          time: 1787232106599,
+          messaging: [
+            {
+              sender: { id: "1415193703837239" },
+              recipient: { id: "17841480535369396" },
+              message: { mid: "mid_gone", is_deleted: true },
+            },
+          ],
+        },
+      ],
+    } as Parameters<typeof parseDeletedMessageIds>[0]);
+
+    expect(ids).toEqual(["mid_gone"]);
+  });
+
+  it("ignores ordinary messages", () => {
+    const ids = parseDeletedMessageIds({
+      object: "instagram",
+      entry: [
+        {
+          id: "17841480535369396",
+          time: 1787232106599,
+          messaging: [
+            {
+              sender: { id: "1415193703837239" },
+              recipient: { id: "17841480535369396" },
+              message: { mid: "mid_ok", text: "Strom" },
+            },
+          ],
+        },
+      ],
+    } as Parameters<typeof parseDeletedMessageIds>[0]);
+
+    expect(ids).toEqual([]);
   });
 });

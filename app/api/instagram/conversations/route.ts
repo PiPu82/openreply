@@ -5,6 +5,13 @@ import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { sendDirectMessage, MetaApiError } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 import { recordThreadMessages } from "@/lib/inbox/store";
+import {
+  automationsForContacts,
+  buildInboxQuery,
+  inboxFilterOptions,
+  type InboxFilters,
+  type ThreadState,
+} from "@/lib/inbox/query";
 import { syncAccountConversations } from "@/lib/inbox/sync";
 
 /**
@@ -56,6 +63,14 @@ function syncInBackground(account: {
     });
 }
 
+export interface ThreadAutomationInfo {
+  id: string;
+  name: string;
+  status: string;
+  matchedKeyword: string | null;
+  sentTime: string | null;
+}
+
 export interface ConversationListItem {
   id: string;
   contact: { id: string; username: string | null };
@@ -65,11 +80,49 @@ export interface ConversationListItem {
     fromMe: boolean;
     createdTime: string | null;
   } | null;
+  /// Which campaign brought this contact in, if any. Null means they wrote in
+  /// by themselves — no automation ever reached them.
+  automation: ThreadAutomationInfo | null;
 }
 
 export interface ConversationsResponse {
   conversations: ConversationListItem[];
   account: { id: string; username: string; instagramId: string };
+  /// Choices for the filter controls, derived from the data that exists.
+  filters: {
+    automations: Array<{ id: string; name: string }>;
+    keywords: string[];
+  };
+  counts: { shown: number; awaitingReply: number };
+}
+
+const THREAD_STATES: ThreadState[] = [
+  "awaiting_reply",
+  "dm_failed",
+  "delivered_unread",
+  "all",
+];
+
+/** Parse a date parameter, ignoring anything unparseable rather than failing. */
+function parseDate(value: string | null, endOfDay = false): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(endOfDay ? `${value}T23:59:59.999` : value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function readFilters(params: URLSearchParams): InboxFilters {
+  const state = params.get("state");
+  return {
+    q: params.get("q") ?? undefined,
+    from: parseDate(params.get("from")),
+    // An end date is given as a day, and a day includes its evening.
+    to: parseDate(params.get("to"), true),
+    automationId: (params.get("automation") as InboxFilters["automationId"]) ?? undefined,
+    keyword: params.get("keyword") ?? undefined,
+    state: THREAD_STATES.includes(state as ThreadState)
+      ? (state as ThreadState)
+      : undefined,
+  };
 }
 
 // List the account's DM conversations for the inbox.
@@ -97,10 +150,16 @@ export async function GET(request: NextRequest) {
     // Read from the local store, not from Meta. The Conversations API needs
     // 5–9 seconds for this list because it resolves 50 threads on demand;
     // every one of those messages already arrived by webhook and is on disk.
+    const filters = readFilters(request.nextUrl.searchParams);
+    const { where } = await buildInboxQuery(workspaceId, account.id, filters);
+
     let stored = await prisma.conversation.findMany({
-      where: { workspaceId, instagramAccountId: account.id },
+      where,
       orderBy: { lastMessageAt: "desc" },
-      take: 50,
+      // Higher than the old cap of 50: that number was set by how many threads
+      // Meta could resolve in one call, which no longer applies. With filters
+      // in front of it, a page of 200 is what makes a filtered view usable.
+      take: 200,
       select: {
         id: true,
         contactId: true,
@@ -127,9 +186,9 @@ export async function GET(request: NextRequest) {
       }
 
       stored = await prisma.conversation.findMany({
-        where: { workspaceId, instagramAccountId: account.id },
+        where,
         orderBy: { lastMessageAt: "desc" },
-        take: 50,
+        take: 200,
         select: {
           id: true,
           contactId: true,
@@ -144,18 +203,35 @@ export async function GET(request: NextRequest) {
       syncInBackground(account);
     }
 
-    const conversations: ConversationListItem[] = stored.map((c) => ({
-      id: c.id,
-      contact: { id: c.contactId, username: c.contactUsername },
-      updatedTime: (c.lastMessageAt ?? c.updatedAt).toISOString(),
-      lastMessage: c.lastMessageAt
-        ? {
-            text: c.lastMessageText ?? "",
-            fromMe: c.lastMessageFromMe,
-            createdTime: c.lastMessageAt.toISOString(),
-          }
-        : null,
-    }));
+    // One lookup for the whole page rather than one per row.
+    const automations = await automationsForContacts(
+      stored.map((c) => c.contactId)
+    );
+
+    const conversations: ConversationListItem[] = stored.map((c) => {
+      const automation = automations.get(c.contactId);
+      return {
+        id: c.id,
+        contact: { id: c.contactId, username: c.contactUsername },
+        updatedTime: (c.lastMessageAt ?? c.updatedAt).toISOString(),
+        lastMessage: c.lastMessageAt
+          ? {
+              text: c.lastMessageText ?? "",
+              fromMe: c.lastMessageFromMe,
+              createdTime: c.lastMessageAt.toISOString(),
+            }
+          : null,
+        automation: automation
+          ? {
+              id: automation.id,
+              name: automation.name,
+              status: automation.status,
+              matchedKeyword: automation.matchedKeyword,
+              sentTime: automation.sentAt?.toISOString() ?? null,
+            }
+          : null,
+      };
+    });
 
     const data: ConversationsResponse = {
       conversations,
@@ -163,6 +239,13 @@ export async function GET(request: NextRequest) {
         id: account.id,
         username: account.username,
         instagramId: account.instagramId,
+      },
+      filters: await inboxFilterOptions(account.id),
+      counts: {
+        shown: conversations.length,
+        awaitingReply: conversations.filter(
+          (c) => c.lastMessage && !c.lastMessage.fromMe
+        ).length,
       },
     };
     return NextResponse.json({ success: true, data });

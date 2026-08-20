@@ -97,3 +97,69 @@ export async function GET(request: NextRequest, { params }: RouteProps) {
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
+
+/**
+ * Erase everything held about one person.
+ *
+ * The counterpart to the export: a deletion request, answered in one action
+ * rather than by hand-written SQL. Removes the thread with its messages
+ * (cascade) and the DM log entries that name them.
+ *
+ * LinkClick is deliberately untouched — it stores a hashed IP and no personal
+ * identifier, which is why it can stay.
+ *
+ * This does not reach Instagram. The conversation still exists in the app for
+ * both sides; what is erased is this system's copy.
+ */
+export async function DELETE(request: NextRequest, { params }: RouteProps) {
+  const workspaceId = await getCurrentWorkspaceId();
+  if (!workspaceId) {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  const { id: conversationId } = await params;
+
+  const account = await getWorkspaceInstagramAccount(
+    workspaceId,
+    request.nextUrl.searchParams.get("instagramAccountId")
+  );
+  if (!account) {
+    return NextResponse.json(
+      { success: false, error: "Instagram account not connected." },
+      { status: 400 }
+    );
+  }
+
+  const conversation = await prisma.conversation.findFirst({
+    where: {
+      id: conversationId,
+      workspaceId,
+      instagramAccountId: account.id,
+    },
+    select: { id: true, contactId: true },
+  });
+
+  if (!conversation) {
+    return NextResponse.json(
+      { success: false, error: "Conversation not found." },
+      { status: 404 }
+    );
+  }
+
+  // One transaction: a half-erased person — thread gone, funnel log still
+  // naming them — would be worse than not having started.
+  const [dmLogs] = await prisma.$transaction([
+    prisma.dmLog.deleteMany({
+      where: { commenterId: conversation.contactId, workspaceId },
+    }),
+    prisma.conversation.delete({ where: { id: conversation.id } }),
+  ]);
+
+  return NextResponse.json({
+    success: true,
+    data: { conversationDeleted: true, dmLogsDeleted: dmLogs.count },
+  });
+}

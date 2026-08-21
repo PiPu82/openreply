@@ -90,16 +90,16 @@ export default function ImportCampaignsPage() {
           Füge eine CSV mit einer Zeile je Kampagne ein. Jede Zeile öffnet sich
           vorbelegt und änderbar im Editor, sodass du sie prüfen und das Reel
           wählen kannst, bevor du speicherst. Pflichtspalten sind{" "}
-          <code className="text-accent">keywords</code> and{" "}
+          <code className="text-accent">keywords</code> und{" "}
           <code className="text-accent">dm_message</code>. Optional:{" "}
           <code className="text-accent">name</code>,{" "}
           <code className="text-accent">public_reply</code>,{" "}
           <code className="text-accent">tracked_url</code>,{" "}
           <code className="text-accent">opening_dm</code>,{" "}
-          <code className="text-accent">opening_dm_button</code>. Keywords go in
-          one cell, separated by commas. Use{" "}
-          <code className="text-accent">{"{link}"}</code> in the message to
-          insert the tracked link.
+          <code className="text-accent">opening_dm_button</code>. Mehrere
+          Schlüsselwörter gehören in eine Zelle, durch Komma getrennt. Mit{" "}
+          <code className="text-accent">{"{link}"}</code> im Nachrichtentext
+          wird der getrackte Link eingesetzt.
         </p>
       </div>
 

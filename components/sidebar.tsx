@@ -13,6 +13,7 @@ const navItems = [
   { label: "Übersicht", href: "/dashboard" },
   { label: "Auswertung", href: "/overview" },
   { label: "Posteingang", href: "/inbox" },
+  { label: "Top-Kontakte", href: "/engagement" },
   { label: "Kampagnen", href: "/campaigns" },
   { label: "DM-Protokoll", href: "/logs" },
   { label: "Einstellungen", href: "/settings" },

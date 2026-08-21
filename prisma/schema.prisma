@@ -86,6 +86,7 @@ model Workspace {
   operationalEvents OperationalEvent[]
   conversations     Conversation[]
   messages          Message[]
+  interactions      Interaction[]
 
   @@index([ownerId])
 }
@@ -144,6 +145,7 @@ model InstagramAccount {
   linkClicks  LinkClick[]
   followerSnapshots FollowerSnapshot[]
   conversations     Conversation[]
+  interactions      Interaction[]
 
   @@index([workspaceId])
 }
@@ -472,4 +474,44 @@ enum MessageSource {
   BACKFILL
   /// Fetched from the Conversations API by the sync job.
   GRAPH
+}
+
+/// One thing a person did: a comment, an inbound DM, a button tap.
+///
+/// Recorded purely from webhook deliveries, which arrive whether or not a
+/// keyword matched — Instagram sends every comment on the account, and until
+/// now the ones that matched nothing were discarded. Nothing here costs an API
+/// call, then or later.
+///
+/// Deliberately not a score column: a stored number would have to be
+/// recalculated whenever the ranking period changes. Counting rows per period
+/// is the same answer without the bookkeeping.
+model Interaction {
+  id                 String          @id @default(cuid())
+  workspaceId        String
+  instagramAccountId String
+  /// IGSID of the person. Comments carry it; so do DMs and postbacks.
+  contactId          String
+  /// Their handle where the event carried one. Comments always do, postbacks
+  /// never — the ranking falls back to whatever any of their events supplied.
+  contactUsername    String?
+  type               InteractionType
+  /// Comment id, message id, or postback id. Unique, because Meta redelivers
+  /// on any non-200 and the backfill replays the same payloads: without it a
+  /// single comment could be counted several times.
+  externalId         String          @unique
+  at                 DateTime
+  createdAt          DateTime        @default(now())
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, at])
+  @@index([contactId])
+}
+
+enum InteractionType {
+  COMMENT
+  DM
+  BUTTON_TAP
 }

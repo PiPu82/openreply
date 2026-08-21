@@ -13,6 +13,7 @@
 import { prisma } from "@/lib/db/client";
 import {
   parseDeletedMessageIds,
+  parseInteractionEvents,
   parseReadEvents,
   parseThreadMessageEvents,
 } from "@/lib/meta/webhook";
@@ -21,6 +22,7 @@ import {
   recordThreadMessages,
   removeDeletedMessages,
 } from "./store";
+import { recordInteractions, toInteractionInputs } from "@/lib/engagement/store";
 
 export interface BackfillResult {
   events: number;
@@ -28,6 +30,7 @@ export interface BackfillResult {
   conversations: number;
   receipts: number;
   deleted: number;
+  interactions: number;
 }
 
 export async function backfillInboxFromWebhookEvents(
@@ -39,6 +42,7 @@ export async function backfillInboxFromWebhookEvents(
     conversations: 0,
     receipts: 0,
     deleted: 0,
+    interactions: 0,
   };
 
   let cursor: string | undefined;
@@ -71,6 +75,12 @@ export async function backfillInboxFromWebhookEvents(
       );
       result.stored += stored.stored;
       result.conversations += stored.conversations;
+
+      // The engagement ranking reaches back as far as the stored payloads do,
+      // rather than starting the day it was built.
+      result.interactions += await recordInteractions(
+        toInteractionInputs(parseInteractionEvents(payload))
+      );
 
       // Replayed in order, so a message stored by an earlier payload is
       // removed again when its deletion comes up.

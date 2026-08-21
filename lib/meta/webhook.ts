@@ -429,3 +429,95 @@ export function parseThreadMessageEvents(
 
   return events;
 }
+
+/// One thing a person did, as read from a webhook delivery.
+export interface WebhookInteraction {
+  instagramAccountId: string;
+  contactId: string;
+  contactUsername?: string;
+  kind: "comment" | "dm" | "button_tap";
+  /// Comment id, message id, or postback id — whatever identifies this one
+  /// event, so replays cannot count it twice.
+  externalId: string;
+  at: Date;
+}
+
+/**
+ * Every interaction in a payload: comments, inbound DMs, button taps.
+ *
+ * Reads the payload directly instead of combining the other parsers, because
+ * those drop the timestamps — parseCommentEvents and parsePostbackEvents are
+ * built for reacting to an event now, where the time is simply "now". A ranking
+ * over a period needs when it happened.
+ *
+ * The account's own actions are skipped throughout: our public replies are
+ * comments too, and would otherwise top every ranking.
+ */
+export function parseInteractionEvents(
+  payload: WebhookPayload
+): WebhookInteraction[] {
+  const events: WebhookInteraction[] = [];
+
+  if (payload.object !== "instagram") return events;
+
+  for (const entry of payload.entry ?? []) {
+    const accountId = entry.id;
+    if (!accountId) continue;
+
+    // Comments — including those that match no campaign, which is most of the
+    // point: engagement is not limited to the people a funnel caught.
+    for (const change of entry.changes ?? []) {
+      if (change.field !== "comments") continue;
+      const value = change.value;
+      const commentId = value?.id ?? value?.comment_id;
+      const commenterId = value?.from?.id;
+      if (!commentId || !commenterId || commenterId === accountId) continue;
+
+      events.push({
+        instagramAccountId: accountId,
+        contactId: commenterId,
+        contactUsername: value.from?.username,
+        kind: "comment",
+        externalId: commentId,
+        at: new Date(entry.time ?? Date.now()),
+      });
+    }
+
+    for (const messaging of entry.messaging ?? []) {
+      const at = new Date(messaging.timestamp ?? entry.time ?? Date.now());
+
+      const postback = messaging.postback;
+      const senderId = messaging.sender?.id;
+      if (postback?.payload && senderId && senderId !== accountId) {
+        events.push({
+          instagramAccountId: accountId,
+          contactId: senderId,
+          kind: "button_tap",
+          // Falls back to sender plus payload where Meta sends no id; a repeat
+          // tap on the same button then counts once, which is the fairer
+          // reading anyway.
+          externalId: postback.mid ?? `tap_${senderId}_${postback.payload}`,
+          at,
+        });
+        continue;
+      }
+
+      const message = messaging.message;
+      if (!message?.mid) continue;
+      // Echoes are the account's own messages; deletions are not an action to
+      // credit someone for.
+      if (message.is_echo || message.is_deleted) continue;
+      if (!senderId || senderId === accountId) continue;
+
+      events.push({
+        instagramAccountId: accountId,
+        contactId: senderId,
+        kind: "dm",
+        externalId: message.mid,
+        at,
+      });
+    }
+  }
+
+  return events;
+}

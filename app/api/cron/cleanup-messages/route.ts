@@ -12,7 +12,8 @@ const DEFAULT_RETENTION_DAYS = 180;
  * already used for uploads.
  *
  * Threads left without any message are removed too: an empty thread still names
- * a person.
+ * a person. The same cut-off applies to recorded interactions, which carry a
+ * contact id and often a handle.
  *
  * Pass `?dryRun=1` to see what a run would remove without removing it.
  */
@@ -41,12 +42,13 @@ export async function GET(request: NextRequest) {
 
   try {
     if (dryRun) {
-      const messages = await prisma.message.count({
-        where: { sentAt: { lt: cutoff } },
-      });
+      const [messages, interactions] = await Promise.all([
+        prisma.message.count({ where: { sentAt: { lt: cutoff } } }),
+        prisma.interaction.count({ where: { at: { lt: cutoff } } }),
+      ]);
       return NextResponse.json({
         success: true,
-        data: { dryRun: true, retentionDays, cutoff, messages },
+        data: { dryRun: true, retentionDays, cutoff, messages, interactions },
       });
     }
 
@@ -56,6 +58,9 @@ export async function GET(request: NextRequest) {
     const conversations = await prisma.conversation.deleteMany({
       where: { messages: { none: {} } },
     });
+    const interactions = await prisma.interaction.deleteMany({
+      where: { at: { lt: cutoff } },
+    });
 
     return NextResponse.json({
       success: true,
@@ -64,6 +69,7 @@ export async function GET(request: NextRequest) {
         cutoff,
         messages: messages.count,
         conversations: conversations.count,
+        interactions: interactions.count,
       },
     });
   } catch (error) {

@@ -7,6 +7,7 @@ import {
   parsePostbackEvents,
   parseReadEvents,
   parseDeletedMessageIds,
+  parseInteractionEvents,
   parseThreadMessageEvents,
   verifyWebhookSignature,
 } from "@/lib/meta/webhook";
@@ -15,6 +16,10 @@ import {
   recordThreadMessages,
   removeDeletedMessages,
 } from "@/lib/inbox/store";
+import {
+  recordInteractions,
+  toInteractionInputs,
+} from "@/lib/engagement/store";
 import { MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from "@/lib/queue/client";
 import { Prisma } from "@/app/generated/prisma/client";
 
@@ -103,6 +108,16 @@ export async function POST(request: NextRequest) {
     await removeDeletedMessages(
       parseDeletedMessageIds(
         payload as Parameters<typeof parseDeletedMessageIds>[0]
+      )
+    );
+
+    // Everything anyone did, for the engagement ranking. Includes comments no
+    // campaign matched, which is most of what makes the ranking worth having.
+    await recordInteractions(
+      toInteractionInputs(
+        parseInteractionEvents(
+          payload as Parameters<typeof parseInteractionEvents>[0]
+        )
       )
     );
   } catch (error) {

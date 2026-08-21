@@ -108,6 +108,18 @@ function formatTime(iso: string | null): string {
  * thread gets read for, and a bare date cannot answer it. Older messages keep
  * the date in front of the time.
  */
+/**
+ * What to show as a thread's name.
+ *
+ * A handle when there is one. Otherwise the contact id rather than a word like
+ * "unknown": the id is what identifies the thread everywhere else — logs,
+ * database, an export — so a placeholder would make the one thread nobody can
+ * name also the one nobody can look up.
+ */
+function contactLabel(contact: { id: string; username: string | null }): string {
+  return contact.username ? `@${contact.username}` : contact.id;
+}
+
 function formatMessageTime(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -160,6 +172,11 @@ export default function InboxPage() {
   const [sendError, setSendError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Counter rather than a timestamp: the id only has to be unique within this
+  // thread view until the server's own id replaces it, and a clock reading is
+  // both unnecessary and, to the React compiler, an impure call.
+  const optimisticSeq = useRef(0);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
 
@@ -345,7 +362,7 @@ export default function InboxPage() {
 
     // Optimistically show the reply immediately, then confirm with the server.
     const optimistic: ThreadMessage = {
-      id: `optimistic-${Date.now()}`,
+      id: `optimistic-${(optimisticSeq.current += 1)}`,
       text,
       fromMe: true,
       fromUsername: null,
@@ -430,14 +447,14 @@ export default function InboxPage() {
   async function handleDelete() {
     if (!activeId || !selectedAccountId || busyAction) return;
 
-    const who = active?.contact.username
-      ? `@${active.contact.username}`
-      : "this contact";
+    const who = active ? contactLabel(active.contact) : "diesen Kontakt";
     const confirmed = window.confirm(
-      `Delete everything stored about ${who}?\n\n` +
-        "This removes the conversation, its messages and the automation log " +
-        "entries naming them. It cannot be undone.\n\n" +
-        "The conversation itself stays in Instagram — only this app's copy is erased."
+      `Alle gespeicherten Daten zu ${who} löschen?\n\n` +
+        "Entfernt die Unterhaltung, ihre Nachrichten und die Einträge im " +
+        "Automatisierungs-Protokoll, die diese Person nennen. Das lässt sich " +
+        "nicht rückgängig machen.\n\n" +
+        "In Instagram bleibt die Unterhaltung bestehen — gelöscht wird nur die " +
+        "Kopie in dieser Anwendung."
     );
     if (!confirmed) return;
 
@@ -653,7 +670,7 @@ export default function InboxPage() {
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-sm font-medium text-foreground">
-                        @{c.contact.username ?? "unbekannt"}
+                        {contactLabel(c.contact)}
                       </span>
                       <span className="shrink-0 text-[11px] text-zinc-500">
                         {formatTime(c.updatedTime)}
@@ -674,7 +691,9 @@ export default function InboxPage() {
                             : ""}
                           {/* Worth calling out: these people got the public
                               reply but never the DM. */}
-                          {c.automation.status === "FAILED" ? " · DM failed" : ""}
+                          {c.automation.status === "FAILED"
+                            ? " · DM fehlgeschlagen"
+                            : ""}
                         </>
                       ) : (
                         "Ohne Automatisierung"
@@ -709,28 +728,41 @@ export default function InboxPage() {
                 </button>
                 <div className="min-w-0 flex-1">
                   <span className="block truncate">
-                    @{active.contact.username ?? "unbekannt"}
+                    {contactLabel(active.contact)}
                   </span>
                   <span className="block truncate text-[11px] font-normal text-muted">
-                    {/* Wo eine Nachricht landet, entscheidet sich daran, wer
-                        wem folgt — einen Ordner liefert Instagram nicht mit. */}
-                    {active.follow.weFollowContact === false &&
-                    !active.lastMessage?.fromMe
-                      ? "In Anfragen · "
-                      : ""}
-                    {active.follow.contactFollowsUs === true ? "folgt uns · " : ""}
-                    {active.automation
-                      ? [
-                          active.automation.name,
-                          active.automation.matchedKeyword,
-                          active.automation.status === "FAILED"
-                            ? "DM failed"
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")
-                      : "Ohne Automatisierung geschrieben"}
+                    {[
+                      // Wo eine Nachricht landet, entscheidet sich daran, wer
+                      // wem folgt — einen Ordner liefert Instagram nicht mit.
+                      active.follow.weFollowContact === false &&
+                      !active.lastMessage?.fromMe
+                        ? "In Anfragen"
+                        : null,
+                      active.follow.contactFollowsUs === true
+                        ? "folgt uns"
+                        : null,
+                      ...(active.automation
+                        ? [
+                            active.automation.name,
+                            active.automation.matchedKeyword,
+                            active.automation.status === "FAILED"
+                              ? "DM fehlgeschlagen"
+                              : null,
+                          ]
+                        : ["Ohne Automatisierung geschrieben"]),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
+                  {/* Die Kontakt-ID identifiziert den Thread im Protokoll, im
+                      Export und in der Datenbank. select-all, damit ein Klick
+                      zum Kopieren reicht. Entfällt, wenn oben ohnehin schon die
+                      ID steht, weil kein Name bekannt ist. */}
+                  {active.contact.username && (
+                    <span className="block select-all truncate font-mono text-[10px] font-normal text-zinc-500">
+                      {active.contact.id}
+                    </span>
+                  )}
                 </div>
 
                 <button

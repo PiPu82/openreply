@@ -52,11 +52,15 @@ const FOLLOW_CHECKS_PER_RUN = 15;
 /**
  * Fill in who follows whom, for threads where it matters.
  *
- * Only threads with an inbound message are checked. That is the case where the
- * answer changes what someone does: a reply from a contact the account does not
- * follow sits in Instagram's requests folder, which is where messages get
- * missed. Threads that only ever received our DMs are left alone — nobody is
- * waiting on those, and checking all 380 of them would cost 380 calls.
+ * Two kinds of thread qualify, and nothing else:
+ *
+ *   - Threads with an inbound message, where the answer changes what someone
+ *     does: a reply from a contact the account does not follow sits in
+ *     Instagram's requests folder, which is where messages get missed.
+ *   - Threads still showing a bare contact id, so a name can be filled in.
+ *
+ * Threads that only ever received our DMs and already have a handle are left
+ * alone; checking all 380 of them would cost 380 Graph calls for nothing.
  */
 async function refreshFollowStatus(
   account: { id: string; accessToken: string },
@@ -67,8 +71,11 @@ async function refreshFollowStatus(
   const threads = await prisma.conversation.findMany({
     where: {
       instagramAccountId: account.id,
-      messages: { some: { fromMe: false } },
-      OR: [{ followStatusAt: null }, { followStatusAt: { lt: stale } }],
+      OR: [
+        { messages: { some: { fromMe: false } } },
+        { contactUsername: null },
+      ],
+      AND: [{ OR: [{ followStatusAt: null }, { followStatusAt: { lt: stale } }] }],
     },
     orderBy: { lastMessageAt: "desc" },
     take: FOLLOW_CHECKS_PER_RUN,
@@ -78,17 +85,21 @@ async function refreshFollowStatus(
   let checked = 0;
   for (const thread of threads) {
     const status = await getContactProfile(token, thread.contactId);
-    // A failed lookup returns nulls; stamping the time anyway would mean
-    // retrying it on every single run.
-    if (status.contactFollowsUs === null && status.weFollowContact === null) {
-      continue;
-    }
 
+    // Stamp the attempt even when Meta returned nothing. A contact who never
+    // opened a conversation answers `code 230` every time, and without a stamp
+    // those threads would be retried on every run, forever — the sync runs
+    // whenever someone opens the inbox. The stale window brings them back
+    // around in a week, which is soon enough.
     await prisma.conversation.update({
       where: { id: thread.id },
       data: {
-        contactFollowsUs: status.contactFollowsUs,
-        weFollowContact: status.weFollowContact,
+        ...(status.contactFollowsUs === null
+          ? {}
+          : { contactFollowsUs: status.contactFollowsUs }),
+        ...(status.weFollowContact === null
+          ? {}
+          : { weFollowContact: status.weFollowContact }),
         followStatusAt: new Date(),
         // Comes along in the same call, so a thread from someone who never
         // commented — and therefore never appeared in the DM log under a

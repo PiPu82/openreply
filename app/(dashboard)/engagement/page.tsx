@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
+import type { AccountsResponse } from "@/app/api/instagram/accounts/route";
 import type { EngagementResponse } from "@/app/api/engagement/route";
 import type { RankedContact, RankingPeriod } from "@/lib/engagement/ranking";
 
@@ -60,17 +61,37 @@ export default function EngagementPage() {
   useEffect(() => {
     fetch("/api/instagram/accounts")
       .then((r) => r.json())
-      .then((data) => {
-        if (!data.success) return;
-        const list: AccountOption[] = data.data.accounts ?? [];
+      .then((payload) => {
+        if (!payload.success) {
+          setError("Konten konnten nicht geladen werden");
+          setLoading(false);
+          return;
+        }
+        // Typed against the route, so a wrong field name fails to compile
+        // instead of quietly yielding undefined — which is exactly how this
+        // page first shipped stuck on "Lädt…".
+        const data = payload.data as AccountsResponse;
+        const list: AccountOption[] = data.instagramAccounts ?? [];
         setAccounts(list);
-        if (list.length > 0) setSelectedAccountId((id) => id || list[0].id);
+        const chosen = data.selectedInstagramAccountId || list[0]?.id || "";
+        setSelectedAccountId((current) => current || chosen);
+        // No account at all: nothing will ever load, so stop showing a spinner
+        // that cannot resolve.
+        if (!chosen) setLoading(false);
       })
-      .catch(() => setError("Konten konnten nicht geladen werden"));
+      .catch(() => {
+        setError("Konten konnten nicht geladen werden");
+        setLoading(false);
+      });
   }, []);
 
   const load = useCallback(async () => {
-    if (!selectedAccountId) return;
+    // Without an account there is nothing to fetch — and leaving `loading` set
+    // here is what turned a wrong field name into a permanent "Lädt…".
+    if (!selectedAccountId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(

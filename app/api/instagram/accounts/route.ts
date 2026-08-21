@@ -10,6 +10,16 @@ export const runtime = "nodejs";
  * runs the full analytics aggregation. Pages that only need the account list
  * (e.g. the inbox) should use this so they aren't gated on heavy stats.
  */
+export interface AccountsResponse {
+  instagramAccounts: Array<{
+    id: string;
+    username: string;
+    instagramId: string;
+    name: string | null;
+  }>;
+  selectedInstagramAccountId: string | null;
+}
+
 export async function GET() {
   const workspaceId = await getCurrentWorkspaceId();
   if (!workspaceId) {
@@ -25,11 +35,9 @@ export async function GET() {
     select: { id: true, username: true, instagramId: true, name: true },
   });
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      instagramAccounts,
-      selectedInstagramAccountId: instagramAccounts[0]?.id ?? null,
-    },
-  });
+  const data: AccountsResponse = {
+    instagramAccounts,
+    selectedInstagramAccountId: instagramAccounts[0]?.id ?? null,
+  };
+  return NextResponse.json({ success: true, data });
 }

@@ -26,6 +26,14 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+# Prisma's engines are linked against OpenSSL and probe for its version at
+# startup. The slim image ships libssl but not the openssl package, so the probe
+# fails and Prisma guesses ("Defaulting to openssl-1.1.x") on every run. It has
+# worked regardless, but a guess is a poor thing to rely on, and the warning
+# buries real output.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+ && rm -rf /var/lib/apt/lists/*
+
 # Run unprivileged.
 RUN groupadd --system --gid 1001 nodejs \
  && useradd --system --uid 1001 --gid nodejs nextjs

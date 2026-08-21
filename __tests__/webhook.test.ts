@@ -11,6 +11,7 @@ import {
   parseMessageEvents,
   parseReadEvents,
   parseDeletedMessageIds,
+  parseInteractionEvents,
   parseThreadMessageEvents,
   webhookMessageText,
 } from "../lib/meta/webhook";
@@ -536,6 +537,61 @@ describe("parseThreadMessageEvents", () => {
 
     expect(events[0].sentAt.toISOString()).toBe(
       new Date(1787232106599).toISOString()
+    );
+  });
+});
+
+describe("webhook timestamps", () => {
+  it("reads a comment's entry.time as seconds, not milliseconds", () => {
+    // Meta is not consistent: messaging events carry milliseconds, comment
+    // deliveries carry seconds in the very same field. Read as milliseconds a
+    // comment is dated January 1970, which silently empties every ranking
+    // period.
+    const events = parseInteractionEvents({
+      object: "instagram",
+      entry: [
+        {
+          id: "17841480535369396",
+          time: 1787302297,
+          changes: [
+            {
+              field: "comments",
+              value: {
+                id: "comment_1",
+                text: "Strom",
+                from: { id: "1415193703837239", username: "renatefab" },
+                media: { id: "media_1" },
+              },
+            },
+          ],
+        },
+      ],
+    } as Parameters<typeof parseInteractionEvents>[0]);
+
+    expect(events[0].at.toISOString()).toBe("2026-08-21T08:51:37.000Z");
+  });
+
+  it("leaves a messaging timestamp in milliseconds alone", () => {
+    const events = parseInteractionEvents({
+      object: "instagram",
+      entry: [
+        {
+          id: "17841480535369396",
+          time: 1787232106599,
+          messaging: [
+            {
+              sender: { id: "1415193703837239" },
+              recipient: { id: "17841480535369396" },
+              timestamp: 1787232105654,
+              message: { mid: "mid_in", text: "Danke" },
+            },
+          ],
+        },
+      ],
+    } as Parameters<typeof parseInteractionEvents>[0]);
+
+    expect(events[0].at.toISOString()).toBe(
+      new Date(1787232105654).toISOString()
     );
   });
 });

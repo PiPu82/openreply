@@ -420,14 +420,27 @@ export function parseThreadMessageEvents(
         mid,
         fromMe,
         text: webhookMessageText(message),
-        // Webhook timestamps are epoch milliseconds. Fall back to the entry's
-        // own time, then to now, so a message is never dated 1970.
-        sentAt: new Date(messaging.timestamp ?? entry.time ?? Date.now()),
+        sentAt: webhookDate(messaging.timestamp ?? entry.time),
       });
     }
   }
 
   return events;
+}
+
+/**
+ * Turn a webhook timestamp into a date.
+ *
+ * Meta is not consistent about the unit: `messaging[].timestamp` and the
+ * `entry.time` beside it are milliseconds, while the `entry.time` on a comment
+ * delivery is seconds. Read as milliseconds, a comment lands in January 1970.
+ *
+ * Anything below 1e11 is seconds — that boundary is the year 5138 in seconds
+ * and 1973 in milliseconds, so no real timestamp is ambiguous.
+ */
+function webhookDate(value: number | undefined): Date {
+  if (!value) return new Date();
+  return new Date(value < 1e11 ? value * 1000 : value);
 }
 
 /// One thing a person did, as read from a webhook delivery.
@@ -479,12 +492,12 @@ export function parseInteractionEvents(
         contactUsername: value.from?.username,
         kind: "comment",
         externalId: commentId,
-        at: new Date(entry.time ?? Date.now()),
+        at: webhookDate(entry.time),
       });
     }
 
     for (const messaging of entry.messaging ?? []) {
-      const at = new Date(messaging.timestamp ?? entry.time ?? Date.now());
+      const at = webhookDate(messaging.timestamp ?? entry.time);
 
       const postback = messaging.postback;
       const senderId = messaging.sender?.id;

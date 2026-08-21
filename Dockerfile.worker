@@ -22,6 +22,15 @@ FROM node:24-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Prisma's engines are linked against OpenSSL and probe for its version at
+# startup. The slim image ships libssl but not the openssl package, so the probe
+# fails and Prisma guesses ("Defaulting to openssl-1.1.x") on every run. It has
+# worked regardless, but a guess is a poor thing to rely on, and the warning
+# buries real output.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+ && rm -rf /var/lib/apt/lists/*
+
+
 # Create the user before copying, so ownership is set by COPY --chown.
 # A `chown -R` afterwards would rewrite every file into a second image layer
 # and roughly double the image size.

@@ -57,6 +57,10 @@ export default function LogsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("all");
+  const [automations, setAutomations] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [automationFilter, setAutomationFilter] = useState("all");
   const [page, setPage] = useState(1);
 
   const fetchLogs = useCallback(async () => {
@@ -66,19 +70,26 @@ export default function LogsPage() {
       if (selectedAccountId !== "all") {
         params.set("instagramAccountId", selectedAccountId);
       }
+      if (automationFilter !== "all") {
+        params.set("automationId", automationFilter);
+      }
 
       const res = await fetch(`/api/logs?${params}`);
       const data = await res.json();
       if (data.success) {
         setLogs(data.data.logs);
         setPagination(data.data.pagination);
+        // Comes with the response rather than from a second request: the list
+        // depends on the selected account, so it would otherwise drift out of
+        // step with the table it belongs to.
+        setAutomations(data.data.automations ?? []);
       }
     } catch (err) {
       console.error("Failed to fetch logs:", err);
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, selectedAccountId]);
+  }, [page, statusFilter, selectedAccountId, automationFilter]);
 
   useEffect(() => {
     fetch("/api/dashboard/stats")
@@ -130,13 +141,34 @@ export default function LogsPage() {
             </button>
           ))}
         </div>
-        {accounts.length > 1 && (
-          <AccountSelect
-            accounts={accounts}
-            value={selectedAccountId}
-            onChange={handleAccountChange}
-          />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {automations.length > 0 && (
+            <select
+              value={automationFilter}
+              onChange={(e) => {
+                setLoading(true);
+                setAutomationFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Kampagne"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-foreground focus:border-accent/40 focus:outline-none"
+            >
+              <option value="all">Alle Kampagnen</option>
+              {automations.map((automation) => (
+                <option key={automation.id} value={automation.id}>
+                  {automation.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {accounts.length > 1 && (
+            <AccountSelect
+              accounts={accounts}
+              value={selectedAccountId}
+              onChange={handleAccountChange}
+            />
+          )}
+        </div>
       </div>
 
       {/* Table */}

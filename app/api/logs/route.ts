@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   );
   const status = searchParams.get("status");
   const instagramAccountId = searchParams.get("instagramAccountId");
+  const automationId = searchParams.get("automationId");
   const skip = (page - 1) * limit;
   const parsedStatus =
     status && Object.values(DmStatus).includes(status as DmStatus)
@@ -32,9 +33,10 @@ export async function GET(request: NextRequest) {
     ...(instagramAccountId && instagramAccountId !== "all"
       ? { instagramAccountId }
       : {}),
+    ...(automationId && automationId !== "all" ? { automationId } : {}),
   };
 
-  const [logs, total] = await Promise.all([
+  const [logs, total, automations] = await Promise.all([
     prisma.dmLog.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -46,12 +48,26 @@ export async function GET(request: NextRequest) {
       },
     }),
     prisma.dmLog.count({ where }),
+    // Only campaigns that actually appear in the log — offering a filter that
+    // can only return nothing is worse than not offering it.
+    prisma.automation.findMany({
+      where: {
+        workspaceId,
+        dmLogs: { some: {} },
+        ...(instagramAccountId && instagramAccountId !== "all"
+          ? { instagramAccountId }
+          : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
   return NextResponse.json({
     success: true,
     data: {
       logs,
+      automations,
       pagination: {
         page,
         limit,

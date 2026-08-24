@@ -22,6 +22,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatDateShort, formatNumber } from "@/lib/utils/datetime";
 
 export interface FollowerChartPoint {
   date: string;
@@ -38,19 +39,17 @@ const AXIS_TEXT = "#71717a";
 function formatCompact(n: number): string {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return formatNumber(n);
 }
 
 function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  // A plain date string, not an instant: noon keeps it on its own day in
+  // every zone.
+  return formatDateShort(new Date(`${iso}T12:00:00Z`));
 }
 
 function formatSigned(n: number): string {
-  return `${n > 0 ? "+" : ""}${n.toLocaleString()}`;
+  return `${n > 0 ? "+" : ""}${formatNumber(n)}`;
 }
 
 function ChartTooltip({
@@ -67,7 +66,7 @@ function ChartTooltip({
     <div className="rounded border border-border bg-surface px-3 py-2 text-xs shadow-lg">
       <p className="text-muted">{formatDay(point.date)}</p>
       <p className="mt-1 font-semibold text-foreground">
-        {point.followers.toLocaleString()} followers
+        {formatNumber(point.followers)} followers
       </p>
       {point.delta !== null && point.delta !== 0 && (
         <p className={point.delta > 0 ? "text-success" : "text-error"}>
@@ -104,7 +103,7 @@ export default function FollowerChart({
           <p className="mt-1 text-sm text-muted">
             {current === null
               ? "Followerzahl nicht verfügbar"
-              : `${current.toLocaleString()} now`}
+              : `${formatNumber(current)} now`}
             {net !== null && (
               <>
                 {" · "}
@@ -155,7 +154,7 @@ export default function FollowerChart({
                     {formatDay(p.date)}
                   </td>
                   <td className="py-2 px-3 text-right text-muted">
-                    {p.followers.toLocaleString()}
+                    {formatNumber(p.followers)}
                   </td>
                   <td className="py-2 pl-3 text-right text-muted">
                     {p.delta === null ? "—" : formatSigned(p.delta)}

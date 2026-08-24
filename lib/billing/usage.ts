@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/client";
 import type { Prisma } from "@/app/generated/prisma/client";
+import { startOfMonth } from "@/lib/utils/datetime";
 
 // Self-hosted build: usage is still counted per month so the dashboard can
 // report volume, but no cap is enforced. Meta's own rate limits apply instead.
@@ -9,7 +10,7 @@ import type { Prisma } from "@/app/generated/prisma/client";
 const MONTHLY_DM_LIMIT = 2_000_000_000;
 
 function getMonthStart(date = new Date()): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+  return startOfMonth(date);
 }
 
 async function resetUsageIfNeededTx(

@@ -66,13 +66,15 @@ describe("buildInboxQuery", () => {
   it("matches threads with activity in the period, not just their last message", async () => {
     // A thread that was busy last week and again today belongs in last week's
     // results too — filtering on lastMessageAt would hide it.
-    const from = new Date("2026-08-01T00:00:00Z");
-    const to = new Date("2026-08-07T23:59:59Z");
+    // Both bounds are German midnights: `to` is the start of the day after
+    // the one picked, so the comparison is exclusive.
+    const from = new Date("2026-07-31T22:00:00Z");
+    const to = new Date("2026-08-07T22:00:00Z");
 
     const { where } = await buildInboxQuery(WS, ACCOUNT, { from, to });
 
     expect(conditions(where)).toContainEqual({
-      messages: { some: { sentAt: { gte: from, lte: to } } },
+      messages: { some: { sentAt: { gte: from, lt: to } } },
     });
   });
 

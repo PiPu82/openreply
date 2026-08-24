@@ -2,18 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCampaignReportBySlug } from "@/lib/reports/data";
+import { formatDate } from "@/lib/utils/datetime";
 
 type ReportPageProps = {
   params: Promise<{ shareSlug: string }>;
 };
 
-function formatDate(date: Date | null) {
+function displayDate(date: Date | null) {
   if (!date) return "No sends yet";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(date);
 }
 
 function MetricCard({
@@ -104,7 +101,7 @@ export default async function ReportPage({ params }: ReportPageProps) {
               </p>
               <p className="mt-2 font-bold text-white">{report.workspace.name}</p>
               <p className="mt-4 text-xs text-zinc-500">
-                Generated {formatDate(report.generatedAt)}
+                Generated {displayDate(report.generatedAt)}
               </p>
               {report.branded && (
                 <Link
@@ -160,7 +157,7 @@ export default async function ReportPage({ params }: ReportPageProps) {
                 </p>
               </div>
               <p className="text-xs text-zinc-500">
-                Last send: {formatDate(report.metrics.latestSentAt)}
+                Last send: {displayDate(report.metrics.latestSentAt)}
               </p>
             </div>
             <div className="mt-8 grid h-56 grid-cols-7 items-end gap-1.5 sm:gap-3">
@@ -274,7 +271,7 @@ export default async function ReportPage({ params }: ReportPageProps) {
                 Created
               </p>
               <p className="mt-3 text-sm text-zinc-300">
-                {formatDate(report.campaign.createdAt)}
+                {displayDate(report.campaign.createdAt)}
               </p>
             </div>
             <div>

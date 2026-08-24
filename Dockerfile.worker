@@ -22,6 +22,12 @@ FROM node:24-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# The containers used to run in UTC, which made every "today" a UTC day —
+# beginning at 02:00 German time, so entries from just after midnight were
+# counted towards the day before. lib/utils/datetime pins the zone for
+# everything we render or bucket ourselves; this covers the rest.
+ENV TZ=Europe/Berlin
+
 # Prisma's engines are linked against OpenSSL and probe for its version at
 # startup. The slim image ships libssl but not the openssl package, so the probe
 # fails and Prisma guesses ("Defaulting to openssl-1.1.x") on every run. It has

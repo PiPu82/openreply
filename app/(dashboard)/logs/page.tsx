@@ -9,6 +9,7 @@
 import { useEffect, useState, useCallback } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import StatusBadge from "@/components/status-badge";
+import { formatDateTimeShort } from "@/lib/utils/datetime";
 
 interface DmLog {
   id: string;
@@ -227,12 +228,7 @@ export default function LogsPage() {
                       <StatusBadge status={log.status} />
                     </td>
                     <td className="px-4 py-4 text-muted whitespace-nowrap sm:px-6">
-                      {new Date(log.createdAt).toLocaleString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {formatDateTimeShort(log.createdAt)}
                     </td>
                   </tr>
                 ))}

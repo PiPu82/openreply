@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import StatusBadge from "@/components/status-badge";
+import { formatDateTime } from "@/lib/utils/datetime";
 
 interface DiagnosticsData {
   queueCounts: Record<string, number>;
@@ -50,10 +51,6 @@ interface DiagnosticsData {
     createdAt: string;
     resolvedAt: string | null;
   }>;
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleString();
 }
 
 function EmptyState({ label }: { label: string }) {
@@ -185,7 +182,7 @@ export default function DiagnosticsPage() {
                   </span>
                 </div>
                 <p className="mt-2 text-xs text-muted">
-                  {formatDate(alert.createdAt)}
+                  {formatDateTime(alert.createdAt)}
                   {alert.commentId ? ` · ${alert.commentId}` : ""}
                 </p>
               </div>
@@ -234,7 +231,7 @@ export default function DiagnosticsPage() {
                     {event.errorMessage ?? "Unbekannter Fehler"}
                   </p>
                   <p className="mt-1 text-xs text-muted">
-                    {formatDate(event.createdAt)}
+                    {formatDateTime(event.createdAt)}
                   </p>
                 </div>
               ))}
@@ -255,7 +252,7 @@ export default function DiagnosticsPage() {
                     {event.message}
                   </p>
                   <p className="mt-1 text-xs text-muted">
-                    {formatDate(event.createdAt)}
+                    {formatDateTime(event.createdAt)}
                   </p>
                 </div>
               ))}
@@ -274,7 +271,7 @@ export default function DiagnosticsPage() {
               <div key={event.id} className="grid gap-2 border-b border-border pb-3 last:border-0 sm:grid-cols-[140px_1fr_auto]">
                 <p className="text-xs font-semibold text-muted">{event.source}</p>
                 <p className="text-sm text-foreground">{event.message}</p>
-                <p className="text-xs text-muted">{formatDate(event.createdAt)}</p>
+                <p className="text-xs text-muted">{formatDateTime(event.createdAt)}</p>
               </div>
             ))}
           </div>

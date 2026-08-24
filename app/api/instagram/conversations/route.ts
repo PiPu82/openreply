@@ -13,6 +13,7 @@ import {
   type ThreadState,
 } from "@/lib/inbox/query";
 import { syncAccountConversations } from "@/lib/inbox/sync";
+import { addDays, startOfDay } from "@/lib/utils/datetime";
 
 /**
  * Accounts with a sync in flight.
@@ -108,11 +109,18 @@ const THREAD_STATES: ThreadState[] = [
   "all",
 ];
 
-/** Parse a date parameter, ignoring anything unparseable rather than failing. */
+/**
+ * Parse a date parameter, ignoring anything unparseable rather than failing.
+ *
+ * The value is a day as picked in the browser, so its boundaries are German
+ * ones. Read as UTC — which is what the bare string used to do — the window
+ * came out two hours off.
+ */
 function parseDate(value: string | null, endOfDay = false): Date | undefined {
   if (!value) return undefined;
-  const date = new Date(endOfDay ? `${value}T23:59:59.999` : value);
-  return Number.isNaN(date.getTime()) ? undefined : date;
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return endOfDay ? addDays(startOfDay(date), 1) : startOfDay(date);
 }
 
 function readFilters(params: URLSearchParams): InboxFilters {
@@ -120,7 +128,8 @@ function readFilters(params: URLSearchParams): InboxFilters {
   return {
     q: params.get("q") ?? undefined,
     from: parseDate(params.get("from")),
-    // An end date is given as a day, and a day includes its evening.
+    // An end date is given as a day, and a day includes its evening: this
+    // is the start of the following day, compared exclusively.
     to: parseDate(params.get("to"), true),
     automationId: (params.get("automation") as InboxFilters["automationId"]) ?? undefined,
     keyword: params.get("keyword") ?? undefined,

@@ -5,6 +5,7 @@ import {
   summarizeDmStatuses,
 } from "@/lib/tracking/analytics";
 import { buildReportUrl, isReportBranded } from "@/lib/reports/share";
+import { addDays, formatDateShort, startOfDay } from "@/lib/utils/datetime";
 
 function getHostname(url: string) {
   try {
@@ -15,14 +16,8 @@ function getHostname(url: string) {
 }
 
 function getDayWindow(daysAgo: number) {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  start.setDate(start.getDate() - daysAgo);
-
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
-  return { start, end };
+  const start = addDays(startOfDay(new Date()), -daysAgo);
+  return { start, end: addDays(start, 1) };
 }
 
 export async function getCampaignReportBySlug(shareSlug: string) {
@@ -139,10 +134,7 @@ export async function getCampaignReportBySlug(shareSlug: string) {
       ]);
 
       return {
-        date: start.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        }),
+        date: formatDateShort(start),
         sent,
         clicks,
       };

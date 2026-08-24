@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { decryptToken, encryptToken } from "@/lib/meta/oauth";
 import { refreshLongLivedToken } from "@/lib/meta/client";
+import { startOfMonth } from "@/lib/utils/datetime";
 
 const DAYS_BEFORE_EXPIRY = 10;
 
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() + DAYS_BEFORE_EXPIRY);
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthStart = startOfMonth(now);
 
   const usageReset = await prisma.workspace.updateMany({
     where: { usagePeriodStart: { lt: monthStart } },

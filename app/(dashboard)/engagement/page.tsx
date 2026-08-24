@@ -17,6 +17,7 @@ import AccountSelect, { type AccountOption } from "@/components/account-select";
 import type { AccountsResponse } from "@/app/api/instagram/accounts/route";
 import type { EngagementResponse } from "@/app/api/engagement/route";
 import type { RankedContact, RankingPeriod } from "@/lib/engagement/ranking";
+import { formatDate } from "@/lib/utils/datetime";
 
 const PERIODS: Array<{ value: RankingPeriod; label: string }> = [
   { value: "7d", label: "7 Tage" },
@@ -25,16 +26,10 @@ const PERIODS: Array<{ value: RankingPeriod; label: string }> = [
   { value: "all", label: "Seit Beginn" },
 ];
 
-function formatDate(iso: string | null): string {
+function displayDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? "—"
-    : d.toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
+  return Number.isNaN(d.getTime()) ? "—" : formatDate(d);
 }
 
 /** The breakdown behind the number, so a score is never just a number. */
@@ -128,7 +123,7 @@ export default function EngagementPage() {
           </h1>
           <p className="mt-0.5 text-xs text-muted">
             Ein Punkt je Kommentar, DM und Button-Tipp.{" "}
-            {since ? `Erfasst seit ${formatDate(since)}.` : ""}
+            {since ? `Erfasst seit ${displayDate(since)}.` : ""}
           </p>
         </div>
         {accounts.length > 1 && (
@@ -215,7 +210,7 @@ export default function EngagementPage() {
                       {breakdown(contact)}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted sm:px-6">
-                      {formatDate(contact.lastAt)}
+                      {displayDate(contact.lastAt)}
                     </td>
                   </tr>
                 ))

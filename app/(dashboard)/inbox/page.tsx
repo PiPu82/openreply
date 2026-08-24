@@ -18,6 +18,7 @@ import type {
   ConversationsResponse,
 } from "@/app/api/instagram/conversations/route";
 import type { ThreadMessage } from "@/app/api/instagram/conversations/[id]/route";
+import { formatDateShort, formatTime, toDateKey } from "@/lib/utils/datetime";
 
 const POLL_MS = 12_000;
 // Cached list/threads are shown instantly on revisit, then revalidated in the
@@ -91,15 +92,13 @@ function countActiveFilters(filters: InboxFilterState): number {
 }
 const msgCacheKey = (conversationId: string) => `inbox:msgs:${conversationId}`;
 
-function formatTime(iso: string | null): string {
+function displayListTime(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  return sameDay
-    ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  // "Today" has to mean the German day, not the day the server happens to
+  // be in — see lib/utils/datetime.
+  return toDateKey(d) === toDateKey(new Date()) ? formatTime(d) : formatDateShort(d);
 }
 
 /**
@@ -120,21 +119,13 @@ function contactLabel(contact: { id: string; username: string | null }): string 
   return contact.username ? `@${contact.username}` : contact.id;
 }
 
-function formatMessageTime(iso: string | null): string {
+function displayMessageTime(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const time = d.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const sameDay = d.toDateString() === new Date().toDateString();
-  if (sameDay) return time;
-  const date = d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-  return `${date}, ${time}`;
+  const time = formatTime(d);
+  if (toDateKey(d) === toDateKey(new Date())) return time;
+  return `${formatDateShort(d)}, ${time}`;
 }
 
 export default function InboxPage() {
@@ -673,7 +664,7 @@ export default function InboxPage() {
                         {contactLabel(c.contact)}
                       </span>
                       <span className="shrink-0 text-[11px] text-zinc-500">
-                        {formatTime(c.updatedTime)}
+                        {displayListTime(c.updatedTime)}
                       </span>
                     </div>
                     {c.lastMessage && (
@@ -809,7 +800,7 @@ export default function InboxPage() {
                             m.fromMe ? "text-white/70" : "text-zinc-500"
                           }`}
                         >
-                          {formatMessageTime(m.createdTime)}
+                          {displayMessageTime(m.createdTime)}
                           {/* Read receipts only exist for what we sent, and
                               only once Instagram reports them. */}
                           {m.fromMe && m.readTime ? " · Gelesen" : ""}

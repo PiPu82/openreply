@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import type { AccountOption } from "@/components/account-select";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
+import { formatDate } from "@/lib/utils/datetime";
 
 interface SettingsData {
   workspace: {
@@ -189,7 +190,7 @@ export default function SettingsPage() {
                   <p className="mt-1 text-xs text-muted">
                     Token expires{" "}
                     {account.tokenExpiresAt
-                      ? new Date(account.tokenExpiresAt).toLocaleDateString()
+                      ? formatDate(account.tokenExpiresAt)
                       : "not available"}{" "}
                     · {account.webhookSubscribed ? "Webhook bereit" : "Webhook ausstehend"}
                   </p>

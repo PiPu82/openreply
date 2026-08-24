@@ -13,17 +13,13 @@ import AccountSelect from "@/components/account-select";
 import StatCard from "@/components/stat-card";
 import FollowerChart from "@/components/follower-chart";
 import type { OverviewResponse } from "@/app/api/instagram/overview/route";
+import { formatDateShort, formatNumber } from "@/lib/utils/datetime";
 
-function formatNumber(n: number | null): string {
+function formatCompact(n: number | null): string {
   if (n === null) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatNumber(n);
 }
 
 const COUNT_OPTIONS = [
@@ -120,7 +116,7 @@ export default function OverviewPage() {
             // Kept out of the tile row below: that row sums the selected posts,
             // whereas this is a current account-level total.
             <p className="mt-1 text-sm text-muted">
-              {followers.toLocaleString()} followers
+              {formatNumber(followers)} followers
             </p>
           )}
         </div>
@@ -175,12 +171,12 @@ export default function OverviewPage() {
 
       {/* Aggregate totals */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <StatCard label="Aufrufe" value={formatNumber(totals.views)} />
-        <StatCard label="Reichweite" value={formatNumber(totals.reach)} />
-        <StatCard label="Likes" value={formatNumber(totals.likes)} />
-        <StatCard label="Kommentare" value={formatNumber(totals.comments)} />
-        <StatCard label="Gespeichert" value={formatNumber(totals.saved)} />
-        <StatCard label="Geteilt" value={formatNumber(totals.shares)} />
+        <StatCard label="Aufrufe" value={formatCompact(totals.views)} />
+        <StatCard label="Reichweite" value={formatCompact(totals.reach)} />
+        <StatCard label="Likes" value={formatCompact(totals.likes)} />
+        <StatCard label="Kommentare" value={formatCompact(totals.comments)} />
+        <StatCard label="Gespeichert" value={formatCompact(totals.saved)} />
+        <StatCard label="Geteilt" value={formatCompact(totals.shares)} />
       </div>
 
       {/* Follower trend — account-level, independent of the post range */}
@@ -231,25 +227,25 @@ export default function OverviewPage() {
                       )}
                     </td>
                     <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.views)}
+                      {formatCompact(p.views)}
                     </td>
                     <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.reach)}
+                      {formatCompact(p.reach)}
                     </td>
                     <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.likes)}
+                      {formatCompact(p.likes)}
                     </td>
                     <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.comments)}
+                      {formatCompact(p.comments)}
                     </td>
                     <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.saved)}
+                      {formatCompact(p.saved)}
                     </td>
                     <td className="py-3 px-3 text-right text-muted">
-                      {formatNumber(p.shares)}
+                      {formatCompact(p.shares)}
                     </td>
                     <td className="py-3 pl-3 text-right text-zinc-500">
-                      {formatDate(p.timestamp)}
+                      {formatDateShort(p.timestamp)}
                     </td>
                   </tr>
                 ))}

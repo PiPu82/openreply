@@ -14,7 +14,9 @@ function formatStars(count: number): string {
   if (count >= 1000) {
     return `${(count / 1000).toFixed(1)}K`;
   }
-  return count.toLocaleString();
+  // Upstream's English landing page, so English grouping — the German
+  // helpers in lib/utils/datetime are for the dashboard.
+  return new Intl.NumberFormat("en-US").format(count);
 }
 
 const githubIconPath =

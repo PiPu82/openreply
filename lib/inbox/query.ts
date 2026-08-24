@@ -124,7 +124,10 @@ export async function buildInboxQuery(
         some: {
           sentAt: {
             ...(filters.from ? { gte: filters.from } : {}),
-            ...(filters.to ? { lte: filters.to } : {}),
+            // `to` is the start of the day after the one picked, so the
+            // comparison is exclusive — a half-open window needs no
+            // 23:59:59.999 fudge and stays right across a clock change.
+            ...(filters.to ? { lt: filters.to } : {}),
           },
         },
       },

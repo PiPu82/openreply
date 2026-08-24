@@ -6,6 +6,7 @@ import {
   normalizeTopKeywords,
   summarizeDmStatuses,
 } from "@/lib/tracking/analytics";
+import { addDays, formatWeekdayShort, startOfDay, startOfMonth } from "@/lib/utils/datetime";
 
 export async function GET(request: NextRequest) {
   const workspaceId = await getCurrentWorkspaceId();
@@ -19,10 +20,12 @@ export async function GET(request: NextRequest) {
   const userId = await getCurrentUserId();
 
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const weekStart = new Date(todayStart);
-  weekStart.setDate(weekStart.getDate() - 7);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // German day boundaries, not the container's UTC ones: a UTC day only
+  // turns over at 02:00 local time, which pushed every entry from the first
+  // two hours of a night into the day before.
+  const todayStart = startOfDay(now);
+  const weekStart = addDays(todayStart, -7);
+  const monthStart = startOfMonth(now);
   const requestedInstagramAccountId =
     request.nextUrl.searchParams.get("instagramAccountId");
   const selectedAccountId =
@@ -151,10 +154,8 @@ export async function GET(request: NextRequest) {
 
   const dailyDMs: { date: string; count: number }[] = [];
   for (let i = 6; i >= 0; i--) {
-    const dayStart = new Date(todayStart);
-    dayStart.setDate(dayStart.getDate() - i);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
+    const dayStart = addDays(todayStart, -i);
+    const dayEnd = addDays(dayStart, 1);
 
     const count = await prisma.dmLog.count({
       where: {
@@ -166,7 +167,7 @@ export async function GET(request: NextRequest) {
     });
 
     dailyDMs.push({
-      date: dayStart.toLocaleDateString("en-US", { weekday: "short" }),
+      date: formatWeekdayShort(dayStart),
       count,
     });
   }

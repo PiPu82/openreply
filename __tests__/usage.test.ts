@@ -68,7 +68,9 @@ describe("reserveWorkspaceDMSend", () => {
     expect(mockTx.workspace.updateMany).toHaveBeenNthCalledWith(2, {
       where: {
         id: "workspace_123",
-        usagePeriodStart: { gte: new Date(2026, 4, 1) },
+        // Start of the month in German time — 01.05.2026 00:00 CEST — not
+        // UTC midnight, which is 02:00 local and belongs to the same day.
+        usagePeriodStart: { gte: new Date("2026-04-30T22:00:00.000Z") },
         dmsSentThisPeriod: { lt: LIMIT },
       },
       data: { dmsSentThisPeriod: { increment: 1 } },

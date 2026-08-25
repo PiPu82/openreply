@@ -223,6 +223,20 @@ export async function sendPrivateReplyWithButton(
 }
 
 /**
+ * Meta only lets us write to someone for 24 hours after their last action.
+ * Past that, a message needs a tag saying why it is still warranted, and
+ * HUMAN_AGENT — a person answering by hand — extends the window to 7 days.
+ *
+ * Only ever set this where a human really is behind the send. It is not a way
+ * around the window for automation.
+ */
+function taggedAsHumanAgent(humanAgent: boolean) {
+  return humanAgent
+    ? { messaging_type: "MESSAGE_TAG", tag: "HUMAN_AGENT" }
+    : {};
+}
+
+/**
  * Send a direct message (to a user's IGSID) as a button template with a single
  * postback button. Used to re-prompt a user during follow-gating, so tapping
  * the button fires another `messaging_postbacks` webhook carrying `payload`.
@@ -239,7 +253,9 @@ export async function sendDirectMessageWithButton(
    * in one template, which is what lets a follow prompt carry the profile link
    * next to the button that continues the flow.
    */
-  leadingLinks: Array<{ title: string; url: string }> = []
+  leadingLinks: Array<{ title: string; url: string }> = [],
+  /// See taggedAsHumanAgent — only for sends a person actually triggered.
+  humanAgent = false
 ): Promise<{ recipient_id: string; message_id: string }> {
   const response = await fetch(
     `${instagramGraphBase()}/${instagramAccountId}/messages`,
@@ -250,6 +266,7 @@ export async function sendDirectMessageWithButton(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
+        ...taggedAsHumanAgent(humanAgent),
         recipient: { id: userId },
         message: {
           attachment: {
@@ -428,7 +445,9 @@ export async function sendDirectMessage(
   accessToken: string,
   instagramAccountId: string,
   userId: string,
-  message: string
+  message: string,
+  /// See taggedAsHumanAgent — only for sends a person actually triggered.
+  humanAgent = false
 ): Promise<{ recipient_id: string; message_id: string }> {
   const response = await fetch(
     `${instagramGraphBase()}/${instagramAccountId}/messages`,
@@ -439,6 +458,7 @@ export async function sendDirectMessage(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
+        ...taggedAsHumanAgent(humanAgent),
         recipient: { id: userId },
         message: { text: message },
       }),

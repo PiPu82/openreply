@@ -19,6 +19,13 @@ import type {
 } from "@/app/api/instagram/conversations/route";
 import type { ThreadMessage } from "@/app/api/instagram/conversations/[id]/route";
 import { formatDateShort, formatTime, toDateKey } from "@/lib/utils/datetime";
+import { lastInboundAt, reachState } from "@/lib/inbox/reach";
+
+/** A campaign that can be pushed to someone from the inbox. */
+interface StartableCampaign {
+  id: string;
+  name: string;
+}
 
 const POLL_MS = 12_000;
 // Cached list/threads are shown instantly on revisit, then revalidated in the
@@ -152,7 +159,14 @@ export default function InboxPage() {
   const [awaitingReply, setAwaitingReply] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<"export" | "delete" | null>(null);
+  const [busyAction, setBusyAction] = useState<
+    "export" | "delete" | "trigger" | null
+  >(null);
+
+  // Campaigns that can be started by hand from an open thread, loaded when the
+  // picker is first opened rather than with every inbox visit.
+  const [campaignsOpen, setCampaignsOpen] = useState(false);
+  const [campaigns, setCampaigns] = useState<StartableCampaign[] | null>(null);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
@@ -423,6 +437,83 @@ export default function InboxPage() {
     } finally {
       setRefreshing(false);
       window.setTimeout(() => setRefreshNote(null), 4000);
+    }
+  }
+
+  /** Campaigns with an opening DM — the only ones there is anything to start. */
+  async function openCampaignPicker() {
+    setCampaignsOpen((open) => !open);
+    if (campaigns || !selectedAccountId) return;
+
+    try {
+      const res = await fetch(
+        `/api/automations?instagramAccountId=${selectedAccountId}`
+      );
+      const data = await res.json();
+      const list: StartableCampaign[] = (data.data ?? [])
+        .filter(
+          (a: { isActive: boolean; openingDmEnabled: boolean }) =>
+            a.isActive && a.openingDmEnabled
+        )
+        .map((a: { id: string; name: string }) => ({ id: a.id, name: a.name }));
+      setCampaigns(list);
+    } catch {
+      setCampaigns([]);
+      setSendError("Kampagnen konnten nicht geladen werden");
+    }
+  }
+
+  /**
+   * Push the open contact into a campaign: the opening DM goes out with its
+   * button, and the tap continues the normal flow from there.
+   */
+  async function handleStartCampaign(campaign: StartableCampaign) {
+    if (!active || !selectedAccountId || busyAction) return;
+    setCampaignsOpen(false);
+
+    const who = contactLabel(active.contact);
+    const reach = reachState(lastInboundAt(messages));
+
+    if (reach === "closed") {
+      setSendError(
+        `${who} hat seit über 7 Tagen nicht reagiert — Meta lässt keine Nachricht mehr zu.`
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `„${campaign.name}" für ${who} starten?\n\n` +
+        "Die Start-DM geht mit ihrem Button raus; ab dem Tippen läuft alles " +
+        "weiter wie sonst auch.\n\n" +
+        (reach === "human_agent"
+          ? "Die letzte Reaktion ist über 24 Stunden her. Die Nachricht geht " +
+            "als persönliche Antwort raus — dafür sitzt du gerade selbst hier."
+          : "Das Nachrichtenfenster ist offen.")
+    );
+    if (!confirmed) return;
+
+    setBusyAction("trigger");
+    setSendError(null);
+    try {
+      const res = await fetch("/api/instagram/conversations/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          automationId: campaign.id,
+          recipientId: active.contact.id,
+          instagramAccountId: selectedAccountId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await loadMessages(active.id, true);
+      } else {
+        setSendError(data.error ?? "Starten fehlgeschlagen");
+      }
+    } catch {
+      setSendError("Starten fehlgeschlagen");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -753,6 +844,41 @@ export default function InboxPage() {
                     <span className="block select-all truncate font-mono text-[10px] font-normal text-zinc-500">
                       {active.contact.id}
                     </span>
+                  )}
+                </div>
+
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => void openCampaignPicker()}
+                    disabled={busyAction !== null}
+                    title="Eine Kampagne für diesen Kontakt von Hand starten"
+                    className="rounded border border-border px-2 py-1 text-xs font-normal text-muted hover:text-foreground disabled:opacity-50"
+                  >
+                    {busyAction === "trigger" ? "Startet…" : "Kampagne starten"}
+                  </button>
+
+                  {campaignsOpen && (
+                    <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded border border-border bg-surface p-1 shadow-lg">
+                      {campaigns === null ? (
+                        <p className="px-2 py-1.5 text-xs text-muted">Lädt…</p>
+                      ) : campaigns.length === 0 ? (
+                        <p className="px-2 py-1.5 text-xs text-muted">
+                          Keine aktive Kampagne mit Start-DM.
+                        </p>
+                      ) : (
+                        campaigns.map((campaign) => (
+                          <button
+                            key={campaign.id}
+                            type="button"
+                            onClick={() => void handleStartCampaign(campaign)}
+                            className="block w-full truncate rounded px-2 py-1.5 text-left text-xs font-normal text-foreground hover:bg-surface-hover"
+                          >
+                            {campaign.name}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   )}
                 </div>
 

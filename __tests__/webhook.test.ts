@@ -13,6 +13,7 @@ import {
   parseDeletedMessageIds,
   parseInteractionEvents,
   parseThreadMessageEvents,
+  parsePostbackEvents,
   webhookMessageText,
 } from "../lib/meta/webhook";
 import { createHmac } from "crypto";
@@ -686,5 +687,87 @@ describe("parseDeletedMessageIds", () => {
     } as Parameters<typeof parseDeletedMessageIds>[0]);
 
     expect(ids).toEqual([]);
+  });
+});
+
+/**
+ * Button taps used to vanish. The DM log only records one once the reveal has
+ * actually gone out, so anyone stopped by the follow gate left no trace at
+ * all, and the thread showed our messages with nothing in between: 634 taps
+ * happened, 367 were visible. Meta files a tap as a message from the person,
+ * which is exactly what makes it storable.
+ */
+describe("button taps in a thread", () => {
+  const ACCOUNT = "17841480535369396";
+  const CONTACT = "1780695719776866";
+  const TAP_MID = "aWdfZAG1faXRlbToxOklHTWVzc2FnZAUlE";
+
+  function tap(overrides: Record<string, unknown> = {}) {
+    return {
+      object: "instagram",
+      entry: [
+        {
+          id: ACCOUNT,
+          time: 1787566210737,
+          messaging: [
+            {
+              sender: { id: CONTACT },
+              recipient: { id: ACCOUNT },
+              timestamp: 1787566210737,
+              postback: {
+                mid: TAP_MID,
+                title: "Ja, her damit 🦆",
+                payload: "followcheck:cmsyksc6y000301mo3jbjqwwu",
+              },
+              ...overrides,
+            },
+          ],
+        },
+      ],
+    } as Parameters<typeof parseThreadMessageEvents>[0];
+  }
+
+  it("records the tap as an incoming message carrying the button's caption", () => {
+    const events = parseThreadMessageEvents(tap());
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      instagramAccountId: ACCOUNT,
+      contactId: CONTACT,
+      fromMe: false,
+      text: "[Button] Ja, her damit 🦆",
+    });
+    // From messaging.timestamp, which is milliseconds.
+    expect(events[0].sentAt.toISOString()).toBe("2026-08-24T10:10:10.737Z");
+  });
+
+  it("reuses Meta's own id for the tap", () => {
+    // The Conversations API returns the same tap under this id, so the sync
+    // and the backfill write the same row rather than a second copy.
+    expect(parseThreadMessageEvents(tap())[0].mid).toBe(TAP_MID);
+  });
+
+  it("ignores a tap with no caption", () => {
+    const events = parseThreadMessageEvents(
+      tap({ postback: { mid: TAP_MID, payload: "followcheck:abc" } })
+    );
+    expect(events).toHaveLength(0);
+  });
+
+  it("ignores the account tapping in its own thread", () => {
+    const events = parseThreadMessageEvents(tap({ sender: { id: ACCOUNT } }));
+    expect(events).toHaveLength(0);
+  });
+
+  it("carries the caption through to the postback event", () => {
+    // The payload cannot identify the button: behind a follow gate the opening
+    // button and the "I'm following" button both read followcheck:<id>.
+    const events = parsePostbackEvents(
+      tap() as Parameters<typeof parsePostbackEvents>[0]
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0].title).toBe("Ja, her damit 🦆");
+    expect(events[0].payload).toBe("followcheck:cmsyksc6y000301mo3jbjqwwu");
   });
 });

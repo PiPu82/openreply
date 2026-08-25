@@ -740,7 +740,11 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
  * IGSID (same id as their comment author id), which we DM directly.
  */
 async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
-  const { instagramAccountId, userId, payload, fallback } = job.data;
+  const { instagramAccountId, userId, payload, title, fallback } = job.data;
+
+  // What the person actually tapped. The fallback path has no button behind
+  // it, and older jobs queued before this was carried predate the field.
+  const buttonLabel = title?.trim() || "(button tap)";
 
   const isFollowCheck = payload.startsWith("followcheck:");
   if (!isFollowCheck && !payload.startsWith("reveal:")) return;
@@ -846,7 +850,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         instagramAccountId: automation.instagramAccountId,
         commenterId: userId,
         commenterName,
-        commentText: "(button tap)",
+        commentText: buttonLabel,
         commentId: dedupeId,
         status: "SKIPPED_PLAN_LIMIT",
         errorMessage: `Monthly DM limit reached (${usage.limit})`,
@@ -895,7 +899,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         instagramAccountId: automation.instagramAccountId,
         commenterId: userId,
         commenterName,
-        commentText: "(button tap)",
+        commentText: buttonLabel,
         commentId: dedupeId,
         status: "SENT",
         dmSentAt: new Date(),
@@ -930,7 +934,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
         instagramAccountId: automation.instagramAccountId,
         commenterId: userId,
         commenterName,
-        commentText: "(button tap)",
+        commentText: buttonLabel,
         commentId: dedupeId,
         status: "FAILED",
         errorMessage: formatError(error),

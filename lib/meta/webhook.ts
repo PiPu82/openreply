@@ -108,6 +108,11 @@ export interface WebhookPostbackEvent {
   userId: string;
   payload: string;
   mid?: string;
+  /// The button's caption as the person saw it. The payload cannot stand in
+  /// for it: with a follow gate the opening button and the "I'm following"
+  /// button both carry `followcheck:<id>`, so the title is the only thing
+  /// that says which of the two was tapped.
+  title?: string;
 }
 
 export interface WebhookReadEvent {
@@ -191,6 +196,7 @@ export function parsePostbackEvents(
         userId,
         payload: postbackPayload,
         mid: messaging.postback?.mid,
+        title: messaging.postback?.title,
       });
     }
   }
@@ -287,6 +293,11 @@ export interface WebhookThreadMessage {
   text: string;
   sentAt: Date;
 }
+
+/// Marks a tapped button in a thread, in the same spirit as the attachment
+/// placeholders below: what arrived was not typed, and reading it as if it
+/// were would misrepresent the exchange.
+export const BUTTON_TAP_PREFIX = "[Button] ";
 
 const ATTACHMENT_PLACEHOLDERS: Record<string, string> = {
   image: "[Bild]",
@@ -396,6 +407,29 @@ export function parseThreadMessageEvents(
 
   for (const entry of payload.entry ?? []) {
     for (const messaging of entry.messaging ?? []) {
+      // A button tap is an action, but Meta files it as a message from the
+      // person — same id, and the Conversations API returns it with the
+      // button's caption as its text. Keeping it here is what makes a thread
+      // read the way it happened: their tap, then our answer. Without it the
+      // thread shows only our side, and someone who stopped at the follow
+      // gate looks like they never responded at all.
+      const postback = messaging.postback;
+      if (postback?.mid && postback.title) {
+        const tapper = messaging.sender?.id;
+        const account = entry.id;
+        if (tapper && account && tapper !== account) {
+          events.push({
+            instagramAccountId: account,
+            contactId: tapper,
+            mid: postback.mid,
+            fromMe: false,
+            text: `${BUTTON_TAP_PREFIX}${postback.title}`,
+            sentAt: webhookDate(messaging.timestamp ?? entry.time),
+          });
+        }
+        continue;
+      }
+
       const message = messaging.message;
       if (!message || message.is_deleted) continue;
 

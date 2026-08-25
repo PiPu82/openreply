@@ -185,6 +185,7 @@ export async function POST(request: NextRequest) {
           userId: event.userId,
           payload: event.payload,
           mid: event.mid,
+          title: event.title,
         },
         {
           // BullMQ forbids ":" in custom job ids, and the payload is

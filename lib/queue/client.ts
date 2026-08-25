@@ -41,6 +41,9 @@ export interface ProcessPostbackJob {
   userId: string;
   payload: string;
   mid?: string;
+  /// Caption of the button that was tapped, for the DM log. See
+  /// WebhookPostbackEvent.title.
+  title?: string;
   fallback?: boolean;
 }
 

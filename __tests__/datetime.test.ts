@@ -11,6 +11,7 @@ import {
   formatDateShort,
   formatDateTime,
   formatDateTimeShort,
+  formatDayLabel,
   formatNumber,
   formatTime,
   formatWeekdayShort,
@@ -105,6 +106,32 @@ describe("calendar arithmetic across a clock change", () => {
 
   it("normalises across month ends", () => {
     expect(toDateKey(addDays(new Date("2026-08-31T12:00:00Z"), 1))).toBe("2026-09-01");
+  });
+});
+
+describe("formatDayLabel", () => {
+  const NOW = new Date("2026-08-27T09:00:00Z");
+
+  it("says Heute and Gestern rather than a date", () => {
+    expect(formatDayLabel(new Date("2026-08-27T05:00:00Z"), NOW)).toBe("Heute");
+    expect(formatDayLabel(new Date("2026-08-26T05:00:00Z"), NOW)).toBe("Gestern");
+  });
+
+  it("dates the rest with a weekday in front", () => {
+    expect(plain(formatDayLabel(new Date("2026-08-24T10:00:00Z"), NOW))).toBe(
+      "Mo., 24.08.2026"
+    );
+  });
+
+  it("counts the German day: 22:30 UTC is already tomorrow", () => {
+    // The boundary this whole module exists for. 2026-08-26T22:30Z is
+    // 00:30 on the 27th in Berlin, so it belongs to "Heute".
+    expect(formatDayLabel(new Date("2026-08-26T22:30:00Z"), NOW)).toBe("Heute");
+  });
+
+  it("crosses a month end without losing yesterday", () => {
+    const first = new Date("2026-09-01T08:00:00Z");
+    expect(formatDayLabel(new Date("2026-08-31T08:00:00Z"), first)).toBe("Gestern");
   });
 });
 

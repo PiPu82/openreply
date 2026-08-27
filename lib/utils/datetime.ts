@@ -77,6 +77,25 @@ export function formatTime(value: DateInput): string {
   return formatter({ hour: "2-digit", minute: "2-digit" }).format(toDate(value));
 }
 
+/**
+ * The label over a day's block of messages: "Heute", "Gestern", otherwise the
+ * weekday and the date ("Mi., 26.08.2026").
+ *
+ * A thread only ever showed clock times, so a message from last week read as
+ * if it had arrived this morning. The weekday is there because that is how
+ * people remember a conversation — "das war Montag" — and it costs four
+ * characters.
+ *
+ * `now` is a parameter so the boundary is testable rather than whatever the
+ * clock says while the suite runs.
+ */
+export function formatDayLabel(value: DateInput, now: DateInput = new Date()): string {
+  const key = toDateKey(value);
+  if (key === toDateKey(now)) return "Heute";
+  if (key === toDateKey(addDays(now, -1))) return "Gestern";
+  return `${formatWeekdayShort(value)}., ${formatDate(value)}`;
+}
+
 /** "Mo" — chart axis labels. */
 export function formatWeekdayShort(value: DateInput): string {
   return formatter({ weekday: "short" }).format(toDate(value));

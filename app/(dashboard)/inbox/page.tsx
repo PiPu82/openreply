@@ -10,7 +10,7 @@
  * surfaced verbatim when it applies.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import { readCache, writeCache } from "@/lib/client-cache";
 import type {
@@ -18,8 +18,14 @@ import type {
   ConversationsResponse,
 } from "@/app/api/instagram/conversations/route";
 import type { ThreadMessage } from "@/app/api/instagram/conversations/[id]/route";
-import { formatDateShort, formatTime, toDateKey } from "@/lib/utils/datetime";
+import {
+  formatDateShort,
+  formatDateTime,
+  formatTime,
+  toDateKey,
+} from "@/lib/utils/datetime";
 import { lastInboundAt, reachState } from "@/lib/inbox/reach";
+import { groupMessagesByDay } from "@/lib/inbox/days";
 
 /** A campaign that can be pushed to someone from the inbox. */
 interface StartableCampaign {
@@ -130,9 +136,14 @@ function displayMessageTime(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const time = formatTime(d);
-  if (toDateKey(d) === toDateKey(new Date())) return time;
-  return `${formatDateShort(d)}, ${time}`;
+  return formatTime(d);
+}
+
+/** The full stamp behind a bubble's clock time, for hovering. */
+function messageTitle(iso: string | null): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? undefined : formatDateTime(d);
 }
 
 export default function InboxPage() {
@@ -170,6 +181,7 @@ export default function InboxPage() {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
+  const messageDays = useMemo(() => groupMessagesByDay(messages), [messages]);
   const [threadLoading, setThreadLoading] = useState(false);
 
   const [draft, setDraft] = useState("");
@@ -908,30 +920,43 @@ export default function InboxPage() {
                 ) : messages.length === 0 ? (
                   <p className="text-sm text-muted">Keine Nachrichten.</p>
                 ) : (
-                  messages.map((m) => (
-                    <div
-                      key={m.id}
-                      className={`flex ${m.fromMe ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
-                          m.fromMe
-                            ? "bg-accent text-white"
-                            : "bg-surface text-foreground border border-border"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                        <p
-                          className={`mt-1 text-[10px] ${
-                            m.fromMe ? "text-white/70" : "text-zinc-500"
-                          }`}
-                        >
-                          {displayMessageTime(m.createdTime)}
-                          {/* Read receipts only exist for what we sent, and
-                              only once Instagram reports them. */}
-                          {m.fromMe && m.readTime ? " · Gelesen" : ""}
-                        </p>
+                  messageDays.map((day) => (
+                    <div key={day.key} className="space-y-2">
+                      {/* Sticky, so the day stays readable while scrolling
+                          through it. It carries its own background: the
+                          bubbles would otherwise scroll through the text. */}
+                      <div className="sticky top-0 z-10 flex justify-center py-1">
+                        <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] text-muted shadow-sm">
+                          {day.label}
+                        </span>
                       </div>
+                      {day.messages.map((m) => (
+                        <div
+                          key={m.id}
+                          className={`flex ${m.fromMe ? "justify-end" : "justify-start"}`}
+                        >
+                          <div
+                            className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                              m.fromMe
+                                ? "bg-accent text-white"
+                                : "bg-surface text-foreground border border-border"
+                            }`}
+                          >
+                            <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                            <p
+                              className={`mt-1 text-[10px] ${
+                                m.fromMe ? "text-white/70" : "text-zinc-500"
+                              }`}
+                              title={messageTitle(m.createdTime)}
+                            >
+                              {displayMessageTime(m.createdTime)}
+                              {/* Read receipts only exist for what we sent, and
+                                  only once Instagram reports them. */}
+                              {m.fromMe && m.readTime ? " · Gelesen" : ""}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ))
                 )}

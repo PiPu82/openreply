@@ -15,7 +15,8 @@ between midnight and 02:00 into the previous day.
 Use `lib/utils/datetime`:
 
 - rendering — `formatDateTime`, `formatDateTimeShort`, `formatDate`,
-  `formatDateShort`, `formatTime`, `formatWeekdayShort`, `formatNumber`
+  `formatDateShort`, `formatTime`, `formatDayLabel`, `formatWeekdayShort`,
+  `formatNumber`
 - day and month boundaries, day arithmetic — `startOfDay`, `startOfMonth`,
   `addDays`, `toDateKey`
 

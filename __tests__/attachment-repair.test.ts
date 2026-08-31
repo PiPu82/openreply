@@ -166,3 +166,24 @@ describe("repairAttachments", () => {
     });
   });
 });
+
+describe("repairAttachments — what it asks the database for", () => {
+  it("narrows to placeholders in the query, not afterwards", async () => {
+    /**
+     * The bug this exists to stop: the placeholder filter sat after `take`, so
+     * the query fetched the newest messages that merely lacked an attachment —
+     * which is nearly all of them — and the page it got back contained no
+     * placeholders. The repair then reported success having looked at nothing.
+     */
+    mockPrisma.message.findMany.mockResolvedValue([]);
+
+    await repairAttachments(account);
+
+    const [args] = mockPrisma.message.findMany.mock.calls[0];
+    expect(args.where.text?.in).toEqual(
+      expect.arrayContaining(["[Bild]", "[Sprachnachricht]", "[Video]"])
+    );
+    // And a message with no id of Meta's cannot be looked up at all.
+    expect(args.where.mid).toEqual({ not: null });
+  });
+});

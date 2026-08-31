@@ -2,7 +2,10 @@ import { prisma } from "@/lib/db/client";
 import { getConversationMessages, graphMessageMedia } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 import { fetchMedia, storeAttachment } from "@/lib/inbox/media";
-import { kindFromPlaceholder } from "@/lib/inbox/placeholders";
+import {
+  ALL_PLACEHOLDERS,
+  kindFromPlaceholder,
+} from "@/lib/inbox/placeholders";
 
 /**
  * Fetch the files whose webhook moment was missed.
@@ -42,6 +45,12 @@ export async function repairAttachments(account: {
     where: {
       workspaceId: account.workspaceId,
       attachment: { is: null },
+      // Narrowed here, not after the page is fetched. Hardly any message has
+      // an attachment, so "newest without one" is simply the newest messages —
+      // a page of which holds no placeholders at all, and the repair then
+      // finds nothing while reporting success.
+      text: { in: ALL_PLACEHOLDERS },
+      mid: { not: null },
       conversation: {
         instagramAccountId: account.id,
         // Without Meta's own id for the thread there is nothing to ask.

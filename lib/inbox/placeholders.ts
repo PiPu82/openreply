@@ -46,3 +46,13 @@ const KIND_BY_PLACEHOLDER = new Map(
 export function kindFromPlaceholder(text: string): string | null {
   return KIND_BY_PLACEHOLDER.get(text.trim()) ?? null;
 }
+
+/**
+ * Every placeholder, for querying on.
+ *
+ * The repair has to narrow by this in the database, not after fetching a page
+ * of rows: almost no message has an attachment, so "newest messages without
+ * one" is just the newest messages, and a page of them contains no
+ * placeholders at all.
+ */
+export const ALL_PLACEHOLDERS: string[] = [...KIND_BY_PLACEHOLDER.keys()];

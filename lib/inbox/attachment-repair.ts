@@ -3,7 +3,7 @@ import { getConversationMessages, graphMessageMedia } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
 import { fetchMedia, storeAttachment } from "@/lib/inbox/media";
 import {
-  ALL_PLACEHOLDERS,
+  REPAIRABLE_PLACEHOLDERS,
   kindFromPlaceholder,
 } from "@/lib/inbox/placeholders";
 
@@ -25,11 +25,24 @@ import {
 /** Messages to repair per run. Two Graph calls each, so kept small. */
 const REPAIRS_PER_RUN = 25;
 
+/**
+ * How often to go looking for one message's file before giving up.
+ *
+ * Nearly everything the repair cannot fetch, it will never fetch: the message
+ * has slipped past Meta's twenty-message window, or the file was never one
+ * Meta hands back. A few tries covers the case worth covering — a delivery
+ * missed while the CDN or the worker was briefly unwell — and stops those rows
+ * from coming round every hour for the rest of the system's life.
+ */
+const MAX_REPAIR_TRIES = 5;
+
 export interface RepairResult {
   /** Messages found still missing their file. */
   candidates: number;
   /** Files recovered and stored. */
   repaired: number;
+  /** Messages that used up their last try this run and will not be asked again. */
+  gaveUp: number;
 }
 
 export async function repairAttachments(account: {
@@ -49,8 +62,9 @@ export async function repairAttachments(account: {
       // an attachment, so "newest without one" is simply the newest messages —
       // a page of which holds no placeholders at all, and the repair then
       // finds nothing while reporting success.
-      text: { in: ALL_PLACEHOLDERS },
+      text: { in: REPAIRABLE_PLACEHOLDERS },
       mid: { not: null },
+      attachmentTries: { lt: MAX_REPAIR_TRIES },
       conversation: {
         instagramAccountId: account.id,
         // Without Meta's own id for the thread there is nothing to ask.
@@ -63,6 +77,7 @@ export async function repairAttachments(account: {
       id: true,
       mid: true,
       text: true,
+      attachmentTries: true,
       conversation: { select: { id: true, metaConversationId: true } },
     },
   });
@@ -71,8 +86,19 @@ export async function repairAttachments(account: {
     (m) => m.mid && kindFromPlaceholder(m.text) !== null
   );
   if (wanted.length === 0) {
-    return { candidates: 0, repaired: 0 };
+    return { candidates: 0, repaired: 0, gaveUp: 0 };
   }
+
+  // Counted before anything is fetched, so a thread that throws, a link that
+  // has died and a file Meta no longer returns all consume a try. Otherwise
+  // the exact rows that keep failing are the ones that never stop being asked.
+  await prisma.message.updateMany({
+    where: { id: { in: wanted.map((m) => m.id) } },
+    data: { attachmentTries: { increment: 1 } },
+  });
+  const gaveUp = wanted.filter(
+    (m) => m.attachmentTries + 1 >= MAX_REPAIR_TRIES
+  ).length;
 
   // One fetch per thread, not per message: two files in the same conversation
   // arrive in the same response.
@@ -124,5 +150,5 @@ export async function repairAttachments(account: {
     }
   }
 
-  return { candidates: wanted.length, repaired };
+  return { candidates: wanted.length, repaired, gaveUp };
 }

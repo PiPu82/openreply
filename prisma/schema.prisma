@@ -454,20 +454,26 @@ model Conversation {
 /// the Instagram app itself — so a thread assembled from webhooks alone is
 /// complete, not just the half this app sent.
 model Message {
-  id             String        @id @default(cuid())
-  conversationId String
-  workspaceId    String
+  id              String        @id @default(cuid())
+  conversationId  String
+  workspaceId     String
   /// Meta's message id. Unique so a redelivered webhook, a backfill and the
   /// Graph sync can all write the same message without duplicating it.
-  mid            String?       @unique
-  fromMe         Boolean
-  text           String
-  sentAt         DateTime
+  mid             String?       @unique
+  fromMe          Boolean
+  text            String
+  sentAt          DateTime
   /// Set from read receipts, which report a watermark rather than single
   /// messages: everything sent up to that moment counts as read.
-  readAt         DateTime?
-  source         MessageSource @default(WEBHOOK)
-  createdAt      DateTime      @default(now())
+  readAt          DateTime?
+  source          MessageSource @default(WEBHOOK)
+  /// How often the repair has gone looking for this message's file.
+  /// Capped, because most of what it cannot fetch it will never fetch: the
+  /// file is past Meta's twenty-message window, or was never one it hands
+  /// over. Without the count those few rows would be re-asked every hour
+  /// forever, one Graph call each time.
+  attachmentTries Int           @default(0)
+  createdAt       DateTime      @default(now())
 
   conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

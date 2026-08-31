@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
 
   let candidates = 0;
   let repaired = 0;
+  let gaveUp = 0;
   const failures: string[] = [];
 
   for (const account of accounts) {
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
       const result = await repairAttachments(account);
       candidates += result.candidates;
       repaired += result.repaired;
+      gaveUp += result.gaveUp;
     } catch (error) {
       failures.push(account.id);
       console.error("[repair-attachments] account failed", account.id, error);
@@ -42,6 +44,12 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    data: { accounts: accounts.length, candidates, repaired, failures: failures.length },
+    data: {
+      accounts: accounts.length,
+      candidates,
+      repaired,
+      gaveUp,
+      failures: failures.length,
+    },
   });
 }

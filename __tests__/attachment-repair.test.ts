@@ -7,7 +7,7 @@ const {
   mockFetchMedia,
   mockStoreAttachment,
 } = vi.hoisted(() => ({
-  mockPrisma: { message: { findMany: vi.fn() } },
+  mockPrisma: { message: { findMany: vi.fn(), updateMany: vi.fn() } },
   mockGetConversationMessages: vi.fn(),
   mockDecryptToken: vi.fn(),
   mockFetchMedia: vi.fn(),
@@ -39,6 +39,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     id: "msg_1",
     mid: "mid_1",
     text: "[Bild]",
+    attachmentTries: 0,
     conversation: { id: "conv_1", metaConversationId: "meta_conv_1" },
     ...overrides,
   };
@@ -48,6 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockDecryptToken.mockReturnValue("token");
   mockStoreAttachment.mockResolvedValue(true);
+  mockPrisma.message.updateMany.mockResolvedValue({ count: 1 });
   mockFetchMedia.mockResolvedValue({
     data: new Uint8Array([1]),
     mimeType: "image/jpeg",
@@ -91,7 +93,7 @@ describe("repairAttachments", () => {
 
     const result = await repairAttachments(account);
 
-    expect(result).toEqual({ candidates: 1, repaired: 1 });
+    expect(result).toEqual({ candidates: 1, repaired: 1, gaveUp: 0 });
     expect(mockStoreAttachment).toHaveBeenCalledWith(
       expect.objectContaining({ mid: "mid_1", type: "image" })
     );
@@ -124,7 +126,7 @@ describe("repairAttachments", () => {
 
     const result = await repairAttachments(account);
 
-    expect(result).toEqual({ candidates: 1, repaired: 0 });
+    expect(result).toEqual({ candidates: 1, repaired: 0, gaveUp: 0 });
     expect(mockFetchMedia).not.toHaveBeenCalled();
   });
 
@@ -152,7 +154,7 @@ describe("repairAttachments", () => {
 
     const result = await repairAttachments(account);
 
-    expect(result).toEqual({ candidates: 0, repaired: 0 });
+    expect(result).toEqual({ candidates: 0, repaired: 0, gaveUp: 0 });
     expect(mockGetConversationMessages).not.toHaveBeenCalled();
   });
 
@@ -163,6 +165,7 @@ describe("repairAttachments", () => {
     await expect(repairAttachments(account)).resolves.toEqual({
       candidates: 1,
       repaired: 0,
+      gaveUp: 0,
     });
   });
 });
@@ -185,5 +188,61 @@ describe("repairAttachments — what it asks the database for", () => {
     );
     // And a message with no id of Meta's cannot be looked up at all.
     expect(args.where.mid).toEqual({ not: null });
+  });
+});
+
+describe("repairAttachments — when to stop asking", () => {
+  /**
+   * Nearly everything the repair cannot fetch, it will never fetch: the
+   * message has slipped past Meta's twenty-message window, or the file was
+   * never one Meta hands back. Run hourly without a limit, those few rows
+   * would be re-asked for the rest of the system's life, a Graph call each.
+   */
+  it("counts a try before fetching, so failures also consume one", async () => {
+    // The rows that keep failing are exactly the rows that must stop being
+    // asked — counting afterwards would exempt them.
+    mockPrisma.message.findMany.mockResolvedValue([candidate()]);
+    mockGetConversationMessages.mockRejectedValue(new Error("Meta 100"));
+
+    await repairAttachments(account);
+
+    expect(mockPrisma.message.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["msg_1"] } },
+      data: { attachmentTries: { increment: 1 } },
+    });
+  });
+
+  it("stops asking for a message that has used up its tries", async () => {
+    mockPrisma.message.findMany.mockResolvedValue([]);
+
+    await repairAttachments(account);
+
+    const [args] = mockPrisma.message.findMany.mock.calls[0];
+    expect(args.where.attachmentTries).toEqual({ lt: 5 });
+  });
+
+  it("reports the ones it just gave up on", async () => {
+    mockPrisma.message.findMany.mockResolvedValue([
+      candidate({ attachmentTries: 4 }),
+    ]);
+    mockGetConversationMessages.mockResolvedValue([{ id: "other" }]);
+
+    const result = await repairAttachments(account);
+
+    expect(result.gaveUp).toBe(1);
+  });
+
+  it("never asks for a shared post or a reel", async () => {
+    // Those point at somebody else's post, there is no player for them, and
+    // the call could only ever come back with nothing.
+    mockPrisma.message.findMany.mockResolvedValue([]);
+
+    await repairAttachments(account);
+
+    const [args] = mockPrisma.message.findMany.mock.calls[0];
+    expect(args.where.text.in).toContain("[Bild]");
+    expect(args.where.text.in).toContain("[Sprachnachricht]");
+    expect(args.where.text.in).not.toContain("[Reel]");
+    expect(args.where.text.in).not.toContain("[Geteilter Beitrag]");
   });
 });

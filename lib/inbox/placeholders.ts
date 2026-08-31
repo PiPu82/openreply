@@ -56,3 +56,14 @@ export function kindFromPlaceholder(text: string): string | null {
  * placeholders at all.
  */
 export const ALL_PLACEHOLDERS: string[] = [...KIND_BY_PLACEHOLDER.keys()];
+
+/**
+ * The placeholders a repair should even try for.
+ *
+ * A share, a story mention and a reel point at somebody else's post rather
+ * than a file that was sent, and there is no player for them either — asking
+ * Meta for those spends a call per run on something that can never be stored.
+ */
+export const REPAIRABLE_PLACEHOLDERS: string[] = ["image", "video", "audio", "file"]
+  .map((kind) => ATTACHMENT_PLACEHOLDERS[kind])
+  .filter(Boolean);

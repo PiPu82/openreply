@@ -2,6 +2,7 @@ import { UnrecoverableError, Worker, type Job } from "bullmq";
 import {
   getDMQueue,
   getRedisConnection,
+  ATTACHMENT_JOB_NAME,
   MESSAGE_JOB_NAME,
   POSTBACK_JOB_NAME,
   FOLLOWUP_JOB_NAME,
@@ -10,6 +11,7 @@ import {
   type ProcessMessageJob,
   type ProcessPostbackJob,
   type ProcessFollowUpJob,
+  type ProcessAttachmentJob,
 } from "./client";
 import { prisma } from "@/lib/db/client";
 import {
@@ -40,6 +42,7 @@ import {
 } from "@/lib/tracking/message";
 import { attachPendingCampaigns } from "@/lib/campaigns/attach-next-post";
 import { alertHumanMessage } from "@/lib/ops/human-message-alert";
+import { fetchMedia, storeAttachment } from "@/lib/inbox/media";
 
 const BACKOFF_DELAYS = [5 * 60 * 1000, 15 * 60 * 1000, 45 * 60 * 1000];
 
@@ -1303,6 +1306,27 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
   }
 }
 
+/**
+ * Bring a message's media file across before Instagram's link expires.
+ *
+ * Deliberately quiet about failure. The thread already reads correctly — the
+ * message carries its "[Bild]" placeholder either way — so an expired link, a
+ * file over the size limit or a CDN hiccup costs a preview and nothing else.
+ * Throwing would put the job on a retry schedule outliving the URL, and land a
+ * worker alert for something no one can act on.
+ */
+async function processAttachment(job: Job<ProcessAttachmentJob>): Promise<void> {
+  const { mid, url, type } = job.data;
+
+  const media = await fetchMedia(url).catch((error) => {
+    console.error("[attachment] download failed", mid, error);
+    return null;
+  });
+  if (!media) return;
+
+  await storeAttachment({ mid, type, media });
+}
+
 async function processJob(job: Job<DmQueueJob>): Promise<void> {
   if (job.name === POSTBACK_JOB_NAME) {
     return processPostback(job as Job<ProcessPostbackJob>);
@@ -1313,6 +1337,9 @@ async function processJob(job: Job<DmQueueJob>): Promise<void> {
   if (job.name === MESSAGE_JOB_NAME) {
     return processMessage(job as Job<ProcessMessageJob>);
   }
+  if (job.name === ATTACHMENT_JOB_NAME) {
+    return processAttachment(job as Job<ProcessAttachmentJob>);
+  }
   return processComment(job as Job<ProcessCommentJob>);
 }
 
@@ -1321,7 +1348,10 @@ async function recordWorkerFailure(
   error: Error
 ) {
   try {
-    const instagramAccountId = job?.data.instagramAccountId;
+    const instagramAccountId =
+      job && "instagramAccountId" in job.data
+        ? job.data.instagramAccountId
+        : undefined;
     const commentId =
       job && "commentId" in job.data ? job.data.commentId : null;
     const account = instagramAccountId

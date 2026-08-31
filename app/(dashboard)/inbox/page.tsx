@@ -13,6 +13,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import { readCache, writeCache } from "@/lib/client-cache";
+import {
+  ContactAvatar,
+  MessageMedia,
+  rendersMedia,
+} from "@/components/inbox-media";
+import { isAttachmentPlaceholder } from "@/lib/inbox/placeholders";
 import type {
   ConversationListItem,
   ConversationsResponse,
@@ -762,20 +768,29 @@ export default function InboxPage() {
                       isActive ? "bg-surface-hover" : "hover:bg-surface-hover"
                     }`}
                   >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">
-                        {contactLabel(c.contact)}
-                      </span>
-                      <span className="shrink-0 text-[11px] text-zinc-500">
-                        {displayListTime(c.updatedTime)}
-                      </span>
+                    <div className="flex gap-2.5">
+                      <ContactAvatar
+                        conversationId={c.id}
+                        hasAvatar={c.hasAvatar}
+                        label={contactLabel(c.contact)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-sm font-medium text-foreground">
+                            {contactLabel(c.contact)}
+                          </span>
+                          <span className="shrink-0 text-[11px] text-zinc-500">
+                            {displayListTime(c.updatedTime)}
+                          </span>
+                        </div>
+                        {c.lastMessage && (
+                          <p className="mt-0.5 truncate text-xs text-muted">
+                            {c.lastMessage.fromMe ? "Du: " : ""}
+                            {c.lastMessage.text || "(kein Text)"}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {c.lastMessage && (
-                      <p className="mt-0.5 truncate text-xs text-muted">
-                        {c.lastMessage.fromMe ? "Du: " : ""}
-                        {c.lastMessage.text || "(kein Text)"}
-                      </p>
-                    )}
                     <p className="mt-1 truncate text-[10px] text-zinc-500">
                       {c.automation ? (
                         <>
@@ -820,6 +835,12 @@ export default function InboxPage() {
                 >
                   Zurück
                 </button>
+                <ContactAvatar
+                  conversationId={active.id}
+                  hasAvatar={active.hasAvatar}
+                  label={contactLabel(active.contact)}
+                  size={40}
+                />
                 <div className="min-w-0 flex-1">
                   <span className="block truncate">
                     {contactLabel(active.contact)}
@@ -942,7 +963,26 @@ export default function InboxPage() {
                                 : "bg-surface text-foreground border border-border"
                             }`}
                           >
-                            <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                            {m.attachment && rendersMedia(m.attachment) && (
+                              <div className="mb-1">
+                                <MessageMedia
+                                  messageId={m.id}
+                                  attachment={m.attachment}
+                                />
+                              </div>
+                            )}
+                            {/* Drop the caption once the file is on screen:
+                                "[Bild]" above a picture says nothing. Anything
+                                the sender typed themselves is always kept. */}
+                            {!(
+                              m.attachment &&
+                              rendersMedia(m.attachment) &&
+                              isAttachmentPlaceholder(m.text)
+                            ) && (
+                              <p className="whitespace-pre-wrap break-words">
+                                {m.text}
+                              </p>
+                            )}
                             <p
                               className={`mt-1 text-[10px] ${
                                 m.fromMe ? "text-white/70" : "text-zinc-500"

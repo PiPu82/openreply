@@ -87,6 +87,9 @@ export interface ConversationListItem {
   /// Who follows whom, which is what decides the Instagram folder a message
   /// lands in. Null until the sync has checked this contact.
   follow: { contactFollowsUs: boolean | null; weFollowContact: boolean | null };
+  /// Whether a profile picture has been captured for this contact. False means
+  /// initials — either the sync has not reached them, or Instagram gave none.
+  hasAvatar: boolean;
 }
 
 export interface ConversationsResponse {
@@ -184,6 +187,10 @@ export async function GET(request: NextRequest) {
         updatedAt: true,
         contactFollowsUs: true,
         weFollowContact: true,
+        // Presence only. The picture itself is served per row from
+        // /api/inbox/avatar; selecting the bytes here would put megabytes of
+        // images into a list response.
+        avatar: { select: { id: true } },
       },
     });
 
@@ -215,6 +222,10 @@ export async function GET(request: NextRequest) {
           updatedAt: true,
           contactFollowsUs: true,
           weFollowContact: true,
+          // Presence only. The picture itself is served per row from
+          // /api/inbox/avatar; selecting the bytes here would put megabytes of
+          // images into a list response.
+          avatar: { select: { id: true } },
         },
       });
     } else {
@@ -243,6 +254,7 @@ export async function GET(request: NextRequest) {
           contactFollowsUs: c.contactFollowsUs,
           weFollowContact: c.weFollowContact,
         },
+        hasAvatar: Boolean(c.avatar),
         automation: automation
           ? {
               id: automation.id,

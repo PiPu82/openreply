@@ -28,6 +28,7 @@ import {
   messagePreviewText,
 } from "@/lib/meta/client";
 import { decryptToken } from "@/lib/meta/oauth";
+import { AVATAR_MAX_AGE_MS, fetchMedia, storeAvatar } from "@/lib/inbox/media";
 
 export interface SyncResult {
   conversations: number;
@@ -79,7 +80,13 @@ async function refreshFollowStatus(
     },
     orderBy: { lastMessageAt: "desc" },
     take: FOLLOW_CHECKS_PER_RUN,
-    select: { id: true, contactId: true, contactUsername: true },
+    select: {
+      id: true,
+      workspaceId: true,
+      contactId: true,
+      contactUsername: true,
+      avatar: { select: { fetchedAt: true } },
+    },
   });
 
   let checked = 0;
@@ -109,10 +116,53 @@ async function refreshFollowStatus(
           : { contactUsername: status.username }),
       },
     });
+
+    // The profile picture came back on the same call, so taking it costs no
+    // extra rate budget — but the link expires, so the bytes have to come
+    // across now. Spread across runs by the same cap as the follow checks,
+    // which is what keeps a first pass over every thread from arriving as one
+    // burst of downloads.
+    await refreshAvatar(thread, status.profilePicUrl);
+
     checked += 1;
   }
 
   return checked;
+}
+
+/**
+ * Store a contact's profile picture, if there is one and ours has gone stale.
+ *
+ * Never throws: an avatar is decoration on a thread that reads fine without
+ * one, and a CDN hiccup must not stop the sync that also carries follow status
+ * and handles.
+ */
+async function refreshAvatar(
+  thread: {
+    id: string;
+    workspaceId: string;
+    avatar: { fetchedAt: Date } | null;
+  },
+  profilePicUrl: string | null
+): Promise<void> {
+  if (!profilePicUrl) return;
+
+  const age = thread.avatar
+    ? Date.now() - thread.avatar.fetchedAt.getTime()
+    : Infinity;
+  if (age < AVATAR_MAX_AGE_MS) return;
+
+  try {
+    const media = await fetchMedia(profilePicUrl);
+    if (!media) return;
+    await storeAvatar({
+      conversationId: thread.id,
+      workspaceId: thread.workspaceId,
+      media,
+    });
+  } catch (error) {
+    console.error("[inbox-sync] avatar fetch failed", thread.id, error);
+  }
 }
 
 /**

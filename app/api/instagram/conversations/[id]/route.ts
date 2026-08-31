@@ -12,6 +12,10 @@ export interface ThreadMessage {
   createdTime: string | null;
   /// When the recipient read it, for messages we sent. Null while unread.
   readTime?: string | null;
+  /// The media file kept for this message, where one was captured. The bytes
+  /// are fetched separately; `text` still carries the placeholder, so a
+  /// message whose download failed reads exactly as it did before.
+  attachment?: { type: string; mimeType: string } | null;
 }
 
 export interface ThreadResponse {
@@ -76,6 +80,10 @@ export async function GET(request: NextRequest, { params }: RouteProps) {
         fromMe: true,
         sentAt: true,
         readAt: true,
+        // Only the shape, never the bytes: a thread of 500 messages must not
+        // drag megabytes of media through this response. The file itself is
+        // fetched per message from /api/inbox/attachment.
+        attachment: { select: { type: true, mimeType: true } },
       },
     });
 
@@ -86,6 +94,9 @@ export async function GET(request: NextRequest, { params }: RouteProps) {
       fromUsername: m.fromMe ? account.username : conversation.contactUsername,
       createdTime: m.sentAt.toISOString(),
       readTime: m.readAt?.toISOString() ?? null,
+      attachment: m.attachment
+        ? { type: m.attachment.type, mimeType: m.attachment.mimeType }
+        : null,
     }));
 
     const data: ThreadResponse = { messages };

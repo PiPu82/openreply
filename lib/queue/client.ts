@@ -66,15 +66,30 @@ export interface ProcessMessageJob {
   senderId: string;
 }
 
+// A media file that came with a message. Enqueued rather than downloaded in
+// the webhook handler because Meta redelivers anything that does not answer
+// quickly — and retried on a short backoff, because the URL expires: a job
+// that waits the usual 5/15/45 minutes would come back to a dead link.
+export interface ProcessAttachmentJob {
+  mid: string;
+  url: string;
+  type: string;
+}
+
 export type DmQueueJob =
   | ProcessCommentJob
   | ProcessPostbackJob
   | ProcessFollowUpJob
-  | ProcessMessageJob;
+  | ProcessMessageJob
+  | ProcessAttachmentJob;
 
 export const POSTBACK_JOB_NAME = "process-postback";
 export const FOLLOWUP_JOB_NAME = "process-followup";
 export const MESSAGE_JOB_NAME = "process-message";
+export const ATTACHMENT_JOB_NAME = "process-attachment";
+
+/// Meta's link is good for minutes. Three quick tries beat three patient ones.
+export const ATTACHMENT_BACKOFF_MS = 15_000;
 
 let dmQueue: Queue<DmQueueJob> | null = null;
 

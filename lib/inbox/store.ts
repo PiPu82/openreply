@@ -11,6 +11,11 @@
  */
 
 import { prisma } from "@/lib/db/client";
+import {
+  ATTACHMENT_BACKOFF_MS,
+  ATTACHMENT_JOB_NAME,
+  getDMQueue,
+} from "@/lib/queue/client";
 import type { WebhookThreadMessage } from "@/lib/meta/webhook";
 
 type AccountRef = { id: string; workspaceId: string };
@@ -112,6 +117,26 @@ export async function recordThreadMessages(
       skipDuplicates: true,
     });
     stored += created.count;
+
+    // Bring the media across while Meta's link still resolves. Only for live
+    // deliveries: a backfill replays payloads from days ago, whose URLs died
+    // long before, and only for a message actually inserted, so a redelivery
+    // does not queue the same download twice.
+    if (created.count > 0 && source === "WEBHOOK" && event.attachment) {
+      await getDMQueue().add(
+        ATTACHMENT_JOB_NAME,
+        {
+          mid: event.mid,
+          url: event.attachment.url,
+          type: event.attachment.type,
+        },
+        {
+          jobId: `attachment_${event.mid}`,
+          attempts: 3,
+          backoff: { type: "fixed", delay: ATTACHMENT_BACKOFF_MS },
+        }
+      );
+    }
 
     // Only move the thread's summary forward. Backfills and repairs replay old
     // messages, and those must not reorder the inbox or overwrite the preview

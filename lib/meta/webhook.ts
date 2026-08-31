@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { ATTACHMENT_PLACEHOLDERS } from "@/lib/inbox/placeholders";
 
 export function verifyWebhookSignature(
   payload: string,
@@ -292,22 +293,52 @@ export interface WebhookThreadMessage {
   fromMe: boolean;
   text: string;
   sentAt: Date;
+  /// The media file that came with the message, where there was one. The URL
+  /// is good for minutes, not for storage — whoever takes this has to fetch
+  /// the bytes now. `text` still carries the placeholder, so a thread reads
+  /// the same whether or not the download worked.
+  attachment?: WebhookAttachment;
+}
+
+export interface WebhookAttachment {
+  /// Meta's type: image, video, audio, file, share, ig_reel.
+  type: string;
+  url: string;
+}
+
+/// Attachment types worth downloading. `share` and `story_mention` point at
+/// somebody else's post rather than a file the sender attached, and their
+/// links die with the story — the placeholder says more than a broken frame.
+const FETCHABLE_ATTACHMENT_TYPES = new Set(["image", "video", "audio", "file"]);
+
+/**
+ * The media file on a webhook message, if it carries one worth keeping.
+ *
+ * Deliberately blind to `payload.generic`: that shape is one of our own
+ * template DMs coming back as an echo — a title and a button, no file. Treating
+ * it as an attachment would try to download the button's target.
+ */
+export function webhookAttachment(message: {
+  attachments?: Array<{
+    type?: string;
+    payload?: { url?: string; generic?: unknown };
+  }>;
+}): WebhookAttachment | undefined {
+  for (const attachment of message.attachments ?? []) {
+    const type = attachment.type;
+    const url = attachment.payload?.url;
+    if (!type || !url) continue;
+    if (attachment.payload?.generic) continue;
+    if (!FETCHABLE_ATTACHMENT_TYPES.has(type)) continue;
+    return { type, url };
+  }
+  return undefined;
 }
 
 /// Marks a tapped button in a thread, in the same spirit as the attachment
 /// placeholders below: what arrived was not typed, and reading it as if it
 /// were would misrepresent the exchange.
 export const BUTTON_TAP_PREFIX = "[Button] ";
-
-const ATTACHMENT_PLACEHOLDERS: Record<string, string> = {
-  image: "[Bild]",
-  video: "[Video]",
-  audio: "[Sprachnachricht]",
-  file: "[Datei]",
-  share: "[Geteilter Beitrag]",
-  story_mention: "[Story-Erwähnung]",
-  ig_reel: "[Reel]",
-};
 
 /**
  * Readable text for a webhook message, mirroring what the inbox shows for the
@@ -455,6 +486,7 @@ export function parseThreadMessageEvents(
         fromMe,
         text: webhookMessageText(message),
         sentAt: webhookDate(messaging.timestamp ?? entry.time),
+        attachment: webhookAttachment(message),
       });
     }
   }

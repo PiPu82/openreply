@@ -309,6 +309,9 @@ export interface ContactProfile {
   /// Their handle. Webhooks carry ids only, so for anyone who never commented
   /// this is the only way to learn it.
   username: string | null;
+  /// Link to their profile picture. Expiring and signed — good for fetching
+  /// the bytes right now, worthless to store. See `lib/inbox/media`.
+  profilePicUrl: string | null;
 }
 
 /**
@@ -332,7 +335,9 @@ export async function getContactProfile(
   const url = new URL(`${instagramGraphBase()}/${contactId}`);
   url.searchParams.set(
     "fields",
-    "username,is_user_follow_business,is_business_follow_user"
+    // profile_pic rides along on a call that already happens, so the inbox
+    // gains avatars for no extra rate budget.
+    "username,profile_pic,is_user_follow_business,is_business_follow_user"
   );
 
   try {
@@ -340,7 +345,12 @@ export async function getContactProfile(
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) {
-      return { contactFollowsUs: null, weFollowContact: null, username: null };
+      return {
+        contactFollowsUs: null,
+        weFollowContact: null,
+        username: null,
+        profilePicUrl: null,
+      };
     }
     const data = await response.json();
     return {
@@ -353,11 +363,18 @@ export async function getContactProfile(
           ? data.is_business_follow_user
           : null,
       username: typeof data?.username === "string" ? data.username : null,
+      profilePicUrl:
+        typeof data?.profile_pic === "string" ? data.profile_pic : null,
     };
   } catch {
     // Never fatal: this only enriches the inbox, and a thread without the flags
     // simply shows nothing rather than blocking anything.
-    return { contactFollowsUs: null, weFollowContact: null, username: null };
+    return {
+      contactFollowsUs: null,
+      weFollowContact: null,
+      username: null,
+      profilePicUrl: null,
+    };
   }
 }
 

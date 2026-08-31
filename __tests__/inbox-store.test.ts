@@ -9,7 +9,8 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockPrisma } = vi.hoisted(() => ({
+const { mockPrisma, mockQueueAdd } = vi.hoisted(() => ({
+  mockQueueAdd: vi.fn(),
   mockPrisma: {
     instagramAccount: { findMany: vi.fn() },
     dmLog: { findFirst: vi.fn() },
@@ -26,6 +27,12 @@ const { mockPrisma } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db/client", () => ({ prisma: mockPrisma }));
+
+vi.mock("@/lib/queue/client", () => ({
+  getDMQueue: () => ({ add: mockQueueAdd }),
+  ATTACHMENT_JOB_NAME: "process-attachment",
+  ATTACHMENT_BACKOFF_MS: 15_000,
+}));
 
 import {
   applyReadReceipt,
@@ -247,5 +254,65 @@ describe("removeDeletedMessages", () => {
   it("does nothing for an empty list", async () => {
     expect(await removeDeletedMessages([])).toBe(0);
     expect(mockPrisma.message.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("recordThreadMessages — media", () => {
+  /**
+   * Instagram's attachment links are signed and expire, so the file has to be
+   * fetched while the webhook is still warm. The store's job is to hand that
+   * off, once, for the right messages.
+   */
+  const withImage = () =>
+    message({
+      mid: "mid_img",
+      text: "[Bild]",
+      attachment: { type: "image", url: "https://cdn/x.jpg" },
+    });
+
+  beforeEach(() => {
+    mockPrisma.instagramAccount.findMany.mockResolvedValue([
+      { id: "acct_1", instagramId: ACCOUNT_IGSID, workspaceId: "ws_1" },
+    ]);
+    mockPrisma.conversation.upsert.mockResolvedValue({
+      id: "conv_1",
+      lastMessageAt: null,
+      contactUsername: "someone",
+    });
+    mockPrisma.message.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.conversation.update.mockResolvedValue({});
+  });
+
+  it("queues the download for a live delivery", async () => {
+    await recordThreadMessages([withImage()]);
+
+    expect(mockQueueAdd).toHaveBeenCalledWith(
+      "process-attachment",
+      { mid: "mid_img", url: "https://cdn/x.jpg", type: "image" },
+      expect.objectContaining({ jobId: "attachment_mid_img" })
+    );
+  });
+
+  it("does not queue a backfill", async () => {
+    // A backfill replays payloads from days ago; those urls died long before,
+    // so every job would be a guaranteed miss.
+    await recordThreadMessages([withImage()], "BACKFILL");
+
+    expect(mockQueueAdd).not.toHaveBeenCalled();
+  });
+
+  it("does not queue a message that was already stored", async () => {
+    // Meta redelivers on any non-200. The insert is what says "new".
+    mockPrisma.message.createMany.mockResolvedValue({ count: 0 });
+
+    await recordThreadMessages([withImage()]);
+
+    expect(mockQueueAdd).not.toHaveBeenCalled();
+  });
+
+  it("queues nothing for a plain text message", async () => {
+    await recordThreadMessages([message()]);
+
+    expect(mockQueueAdd).not.toHaveBeenCalled();
   });
 });

@@ -18,11 +18,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts          Account[]
-  sessions          Session[]
-  ownedWorkspaces   Workspace[]       @relation("WorkspaceOwner")
-  workspaceMembers  WorkspaceMember[]
-  sentInvitations   WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
+  accounts         Account[]
+  sessions         Session[]
+  ownedWorkspaces  Workspace[]           @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
+  sentInvitations  WorkspaceInvitation[] @relation("WorkspaceInvitationsSent")
 }
 
 model Account {
@@ -87,6 +87,8 @@ model Workspace {
   conversations     Conversation[]
   messages          Message[]
   interactions      Interaction[]
+  attachments       MessageAttachment[]
+  contactAvatars    ContactAvatar[]
 
   @@index([ownerId])
 }
@@ -128,21 +130,21 @@ model WorkspaceInvitation {
 }
 
 model InstagramAccount {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   workspaceId       String
-  instagramId       String   @unique
+  instagramId       String    @unique
   username          String
   name              String?
   accessToken       String
   tokenExpiresAt    DateTime?
-  webhookSubscribed Boolean  @default(false)
-  connectedAt       DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  webhookSubscribed Boolean   @default(false)
+  connectedAt       DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  automations Automation[]
-  dmLogs      DmLog[]
-  linkClicks  LinkClick[]
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automations       Automation[]
+  dmLogs            DmLog[]
+  linkClicks        LinkClick[]
   followerSnapshots FollowerSnapshot[]
   conversations     Conversation[]
   interactions      Interaction[]
@@ -171,28 +173,28 @@ model FollowerSnapshot {
 }
 
 model Automation {
-  id                 String   @id @default(cuid())
+  id                 String @id @default(cuid())
   workspaceId        String
   instagramAccountId String
 
-  name           String
-  goal           String?
-  postId         String?
-  postUrl        String?
-  pendingNextReel Boolean @default(false)
-  matchAnyPost   Boolean @default(false)
-  keywords       String[]
-  matchAnyWord   Boolean @default(false)
+  name                    String
+  goal                    String?
+  postId                  String?
+  postUrl                 String?
+  pendingNextReel         Boolean  @default(false)
+  matchAnyPost            Boolean  @default(false)
+  keywords                String[]
+  matchAnyWord            Boolean  @default(false)
   // Also fire this campaign when someone sends a DM whose text matches the
   // keywords above. Independent of the post trigger — a DM has no media, so
   // postId / matchAnyPost do not apply to it.
-  dmTriggerEnabled Boolean @default(false)
-  dmMessage      String
-  openingDmEnabled     Boolean @default(false)
-  openingDmMessage     String?
-  openingDmButtonLabel String?
-  linkButtonLabel      String?
-  requireFollow           Boolean @default(false)
+  dmTriggerEnabled        Boolean  @default(false)
+  dmMessage               String
+  openingDmEnabled        Boolean  @default(false)
+  openingDmMessage        String?
+  openingDmButtonLabel    String?
+  linkButtonLabel         String?
+  requireFollow           Boolean  @default(false)
   followPromptMessage     String?
   followPromptButtonLabel String?
   /// Optional link button shown ahead of the "I'm following" button, so the
@@ -201,18 +203,18 @@ model Automation {
   /// in the same template.
   followPromptLinkUrl     String?
   followPromptLinkLabel   String?
-  followUpEnabled Boolean @default(false)
-  followUpMessage String?
+  followUpEnabled         Boolean  @default(false)
+  followUpMessage         String?
   // Minutes to wait after the link is delivered before sending the follow-up.
   // 0 sends it right away.
-  followUpDelayMinutes Int @default(0)
-  publicReplyEnabled Boolean @default(false)
-  publicReplyMessage String?
-  publicReplyMessages String[] @default([])
-  isActive       Boolean @default(true)
-  wholeWordMatch Boolean @default(true)
-  reportShareSlug    String? @unique
-  reportShareEnabled Boolean @default(true)
+  followUpDelayMinutes    Int      @default(0)
+  publicReplyEnabled      Boolean  @default(false)
+  publicReplyMessage      String?
+  publicReplyMessages     String[] @default([])
+  isActive                Boolean  @default(true)
+  wholeWordMatch          Boolean  @default(true)
+  reportShareSlug         String?  @unique
+  reportShareEnabled      Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -229,20 +231,20 @@ model Automation {
 }
 
 model DmLog {
-  id                 String     @id @default(cuid())
+  id                 String @id @default(cuid())
   workspaceId        String
   automationId       String
   instagramAccountId String
 
-  commenterId   String
-  commenterName String?
-  commentText   String
-  commentId     String
+  commenterId    String
+  commenterName  String?
+  commentText    String
+  commentId      String
   matchedKeyword String?
-  status        DmStatus @default(PENDING)
-  attempts      Int      @default(0)
-  dmSentAt      DateTime?
-  errorMessage  String?
+  status         DmStatus  @default(PENDING)
+  attempts       Int       @default(0)
+  dmSentAt       DateTime?
+  errorMessage   String?
 
   // The public comment reply is delivered independently of the DM, so its
   // outcome is tracked separately. publicReplySentAt makes it idempotent across
@@ -323,14 +325,14 @@ model LinkClick {
 }
 
 model WebhookEvent {
-  id          String        @id @default(cuid())
-  workspaceId String?
-  object      String?
-  payload     Json
-  status      WebhookStatus @default(PENDING)
+  id           String        @id @default(cuid())
+  workspaceId  String?
+  object       String?
+  payload      Json
+  status       WebhookStatus @default(PENDING)
   errorMessage String?
-  createdAt   DateTime      @default(now())
-  processedAt DateTime?
+  createdAt    DateTime      @default(now())
+  processedAt  DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
@@ -339,13 +341,13 @@ model WebhookEvent {
 }
 
 model OperationalEvent {
-  id          String                @id @default(cuid())
+  id          String                 @id @default(cuid())
   workspaceId String?
   source      OperationalEventSource
-  level       OperationalEventLevel @default(INFO)
+  level       OperationalEventLevel  @default(INFO)
   message     String
   payload     Json?
-  createdAt   DateTime              @default(now())
+  createdAt   DateTime               @default(now())
   resolvedAt  DateTime?
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
@@ -434,6 +436,7 @@ model Conversation {
   workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
   messages         Message[]
+  avatar           ContactAvatar?
 
   @@unique([instagramAccountId, contactId])
   @@index([workspaceId, lastMessageAt])
@@ -460,8 +463,9 @@ model Message {
   source         MessageSource @default(WEBHOOK)
   createdAt      DateTime      @default(now())
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  attachment   MessageAttachment?
 
   @@index([conversationId, sentAt])
   @@index([workspaceId, sentAt])
@@ -514,4 +518,46 @@ enum InteractionType {
   COMMENT
   DM
   BUTTON_TAP
+}
+
+/// A media file somebody sent in a thread.
+///
+/// The bytes are kept, never Meta's URL. Attachment links are signed and
+/// expire, so a stored URL becomes a broken image days later with nothing left
+/// to fetch — and no error to notice it by. For the same reason they are
+/// downloaded the moment the webhook arrives: by the time anyone opens the
+/// inbox, the link Meta delivered is already dead.
+model MessageAttachment {
+  id          String   @id @default(cuid())
+  messageId   String   @unique
+  workspaceId String
+  /// Meta's attachment type: image, video, audio, file, share, ig_reel.
+  type        String
+  mimeType    String
+  data        Bytes
+  byteSize    Int
+  fetchedAt   DateTime @default(now())
+
+  message   Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+/// A contact's profile picture, stored for the same reason as attachments:
+/// Instagram hands out an expiring CDN link, not a stable address.
+model ContactAvatar {
+  id             String   @id @default(cuid())
+  conversationId String   @unique
+  workspaceId    String
+  mimeType       String
+  data           Bytes
+  byteSize       Int
+  /// Profile pictures change. The sync refreshes one once it is old enough.
+  fetchedAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }

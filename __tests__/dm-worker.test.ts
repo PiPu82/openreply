@@ -15,6 +15,7 @@ const {
   mockQueueAdd,
   mockReserveWorkspaceDMSend,
   mockReleaseWorkspaceDMReservation,
+  mockAttachPendingCampaigns,
 } = vi.hoisted(() => ({
   mockPrisma: {
     automation: {
@@ -48,6 +49,7 @@ const {
   mockQueueAdd: vi.fn(),
   mockReserveWorkspaceDMSend: vi.fn(),
   mockReleaseWorkspaceDMReservation: vi.fn(),
+  mockAttachPendingCampaigns: vi.fn(),
 }));
 
 vi.mock("@/lib/db/client", () => ({
@@ -105,6 +107,10 @@ vi.mock("@/lib/billing/usage", () => ({
 
 vi.mock("@/lib/ops/worker-health", () => ({
   recordWorkerAlert: vi.fn(),
+}));
+
+vi.mock("@/lib/campaigns/attach-next-post", () => ({
+  attachPendingCampaigns: mockAttachPendingCampaigns,
 }));
 
 vi.mock("@/lib/queue/client", () => ({
@@ -283,6 +289,11 @@ beforeEach(() => {
     message_id: "msg_006",
   });
   mockGetUserFollowStatus.mockResolvedValue(true);
+  mockAttachPendingCampaigns.mockResolvedValue({
+    checked: 0,
+    bound: 0,
+    failedAccounts: [],
+  });
 });
 
 describe("DM Worker — Full Pipeline", () => {
@@ -1248,5 +1259,72 @@ describe("DM Worker — DM keyword trigger", () => {
         create: expect.objectContaining({ status: "FAILED" }),
       })
     );
+  });
+});
+
+describe("DM Worker — campaigns waiting for their post", () => {
+  /**
+   * Instagram sends no webhook when a post is published, so a campaign set to
+   * "the next post" has no postId and the campaign lookup cannot see it. The
+   * first comment on the new post is the earliest signal we get — bind on it,
+   * or that comment is the one that silently falls through.
+   *
+   * Each test uses its own account id: the throttle below keeps state per
+   * account for the life of the worker process, so sharing one id across tests
+   * would make them depend on their order.
+   */
+  function commentOnAccount(instagramAccountId: string) {
+    return createMockJob({ ...mockJobData, instagramAccountId });
+  }
+
+  it("binds waiting campaigns for this account before matching", async () => {
+    const processor = getProcessor();
+
+    await processor(commentOnAccount("ig_bind_a"));
+
+    expect(mockAttachPendingCampaigns).toHaveBeenCalledWith({
+      instagramId: "ig_bind_a",
+    });
+  });
+
+  it("still handles the comment when binding fails", async () => {
+    // A Meta hiccup while binding must not take down a comment that campaigns
+    // already bound to this post would have answered.
+    mockAttachPendingCampaigns.mockRejectedValue(
+      new Error("Meta 190: token expired")
+    );
+    const processor = getProcessor();
+
+    await processor(commentOnAccount("ig_bind_b"));
+
+    expect(mockSendPrivateReply).toHaveBeenCalled();
+  });
+
+  it("looks up media once per account, not once per comment", async () => {
+    // Comments arrive in the hundreds in a post's first hour. Without the
+    // throttle each one would spend a Graph call from the same rate budget the
+    // funnel sends from.
+    const processor = getProcessor();
+
+    await processor(commentOnAccount("ig_bind_c"));
+    await processor(commentOnAccount("ig_bind_c"));
+    await processor(commentOnAccount("ig_bind_c"));
+
+    expect(mockAttachPendingCampaigns).toHaveBeenCalledTimes(1);
+  });
+
+  it("tries again once the throttle window has passed", async () => {
+    vi.useFakeTimers();
+    try {
+      const processor = getProcessor();
+
+      await processor(commentOnAccount("ig_bind_d"));
+      await vi.advanceTimersByTimeAsync(61 * 1000);
+      await processor(commentOnAccount("ig_bind_d"));
+
+      expect(mockAttachPendingCampaigns).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

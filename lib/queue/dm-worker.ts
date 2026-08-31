@@ -38,8 +38,46 @@ import {
   renderMessageWithTracking,
   renderMessageWithoutLink,
 } from "@/lib/tracking/message";
+import { attachPendingCampaigns } from "@/lib/campaigns/attach-next-post";
 
 const BACKOFF_DELAYS = [5 * 60 * 1000, 15 * 60 * 1000, 45 * 60 * 1000];
+
+/**
+ * Don't re-poll an account's media for every comment in a burst.
+ *
+ * While a campaign waits for its post, every incoming comment would otherwise
+ * cost a Graph call — and comments arrive in the hundreds in the first hour of
+ * a post. One lookup per account per minute is enough: the cron runs at the
+ * same cadence, and nothing is lost, because a comment that arrives before the
+ * binding is a comment on an *older* post.
+ */
+const ATTACH_THROTTLE_MS = 60 * 1000;
+const lastAttachAttempt = new Map<string, number>();
+
+/**
+ * Bind campaigns waiting for the creator's next post, then let the caller match
+ * against them.
+ *
+ * Instagram sends no webhook when a post is published, so the first comment on
+ * it is the earliest signal we get. Binding here — before the campaign lookup —
+ * means that very first comment still fires the campaign instead of being the
+ * one comment that falls through.
+ *
+ * Never throws: a failed binding must not swallow a comment that already-bound
+ * campaigns would have matched.
+ */
+async function bindPendingCampaigns(instagramAccountId: string): Promise<void> {
+  const now = Date.now();
+  const last = lastAttachAttempt.get(instagramAccountId) ?? 0;
+  if (now - last < ATTACH_THROTTLE_MS) return;
+  lastAttachAttempt.set(instagramAccountId, now);
+
+  try {
+    await attachPendingCampaigns({ instagramId: instagramAccountId });
+  } catch (error) {
+    console.error("[dm-worker] binding pending campaigns failed", error);
+  }
+}
 
 function formatError(error: unknown): string {
   if (error instanceof MetaApiError) {
@@ -252,6 +290,10 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
     mediaId,
   } = job.data;
   const requeueAttempt = job.data.requeueAttempt ?? 0;
+
+  // A campaign still waiting for its post has no postId, so the query below
+  // cannot see it. This comment may be the announcement that the post exists.
+  await bindPendingCampaigns(instagramAccountId);
 
   const automations = await prisma.automation.findMany({
     where: {

@@ -12,6 +12,21 @@ import { useRouter } from "next/navigation";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
 import { readCache, writeCache } from "@/lib/client-cache";
 
+/**
+ * How long a campaign has been waiting for its post.
+ *
+ * A campaign stuck here for days is a campaign that silently is not running.
+ * Put that on the card, rather than making someone query the database to find
+ * out why nothing fires.
+ */
+function waitingSuffix(createdAt: string): string {
+  const days = Math.floor(
+    (Date.now() - new Date(createdAt).getTime()) / (24 * 60 * 60 * 1000)
+  );
+  if (days < 1) return "";
+  return days === 1 ? " · seit 1 Tag" : ` · seit ${days} Tagen`;
+}
+
 interface Campaign {
   id: string;
   name: string;
@@ -464,7 +479,7 @@ export default function CampaignsPage() {
                   </span>
                   {auto.pendingNextReel && (
                     <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-warning">
-                      Wartet auf nächstes Reel
+                      Wartet auf nächsten Beitrag{waitingSuffix(auto.createdAt)}
                     </span>
                   )}
                   {auto.requireFollow && (

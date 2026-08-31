@@ -39,6 +39,7 @@ import {
   renderMessageWithoutLink,
 } from "@/lib/tracking/message";
 import { attachPendingCampaigns } from "@/lib/campaigns/attach-next-post";
+import { alertHumanMessage } from "@/lib/ops/human-message-alert";
 
 const BACKOFF_DELAYS = [5 * 60 * 1000, 15 * 60 * 1000, 45 * 60 * 1000];
 
@@ -1065,6 +1066,10 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
 
   const dedupeId = `dm:${messageId}`;
 
+  // Whether any automation took this message on. What is left over is someone
+  // writing in their own words — the message a person has to answer.
+  let handledByAutomation = false;
+
   for (const automation of automations) {
     const matchResult = automation.matchAnyWord
       ? { matched: true, matchedKeyword: null }
@@ -1075,6 +1080,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
         );
 
     if (!matchResult.matched) continue;
+    handledByAutomation = true;
 
     const existingLog = await prisma.dmLog.findUnique({
       where: {
@@ -1284,6 +1290,16 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
       });
       throw error;
     }
+  }
+
+  // Nobody automated an answer to this one, so it needs a person. Instagram's
+  // inbox cannot show which of the day's threads those are — push it out.
+  if (!handledByAutomation) {
+    await alertHumanMessage({
+      instagramAccountId,
+      senderId,
+      text: messageText,
+    });
   }
 }
 

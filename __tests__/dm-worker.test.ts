@@ -16,6 +16,7 @@ const {
   mockReserveWorkspaceDMSend,
   mockReleaseWorkspaceDMReservation,
   mockAttachPendingCampaigns,
+  mockAlertHumanMessage,
 } = vi.hoisted(() => ({
   mockPrisma: {
     automation: {
@@ -50,6 +51,7 @@ const {
   mockReserveWorkspaceDMSend: vi.fn(),
   mockReleaseWorkspaceDMReservation: vi.fn(),
   mockAttachPendingCampaigns: vi.fn(),
+  mockAlertHumanMessage: vi.fn(),
 }));
 
 vi.mock("@/lib/db/client", () => ({
@@ -111,6 +113,10 @@ vi.mock("@/lib/ops/worker-health", () => ({
 
 vi.mock("@/lib/campaigns/attach-next-post", () => ({
   attachPendingCampaigns: mockAttachPendingCampaigns,
+}));
+
+vi.mock("@/lib/ops/human-message-alert", () => ({
+  alertHumanMessage: mockAlertHumanMessage,
 }));
 
 vi.mock("@/lib/queue/client", () => ({
@@ -294,6 +300,7 @@ beforeEach(() => {
     bound: 0,
     failedAccounts: [],
   });
+  mockAlertHumanMessage.mockResolvedValue(undefined);
 });
 
 describe("DM Worker — Full Pipeline", () => {
@@ -1326,5 +1333,72 @@ describe("DM Worker — campaigns waiting for their post", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("DM Worker — messages that need a person", () => {
+  /**
+   * The funnel drowns out the few real messages: one week showed 287 active
+   * threads against 20 carrying a typed sentence. Instagram offers no folder,
+   * label or flag to tell them apart, so the ones no automation answered get
+   * pushed out to where they will be seen.
+   */
+  const dmTriggerAutomation = {
+    ...mockAutomation,
+    dmTriggerEnabled: true,
+    requireFollow: false,
+    followPromptMessage: null,
+    followPromptButtonLabel: null,
+  };
+
+  function messageJob(messageText: string) {
+    return {
+      name: "process-message",
+      data: {
+        instagramAccountId: "ig_456",
+        messageId: "mid_real",
+        messageText,
+        senderId: "commenter_999",
+      },
+      id: "message_job_002",
+      attemptsMade: 0,
+    };
+  }
+
+  beforeEach(() => {
+    mockPrisma.automation.findMany.mockResolvedValue([dmTriggerAutomation]);
+  });
+
+  it("announces a message no automation answered", async () => {
+    mockMatchKeywords.mockReturnValue({ matched: false, matchedKeyword: null });
+    const processor = getProcessor();
+
+    await processor(messageJob("Kurze Frage zur Nebenkostenabrechnung"));
+
+    expect(mockAlertHumanMessage).toHaveBeenCalledWith({
+      instagramAccountId: "ig_456",
+      senderId: "commenter_999",
+      text: "Kurze Frage zur Nebenkostenabrechnung",
+    });
+  });
+
+  it("stays quiet when the funnel handled it", async () => {
+    // A keyword DM is somebody entering the funnel, not somebody waiting on an
+    // answer — alerting on those would rebuild the noise this exists to cut.
+    mockMatchKeywords.mockReturnValue({ matched: true, matchedKeyword: "LINK" });
+    const processor = getProcessor();
+
+    await processor(messageJob("can I get the LINK?"));
+
+    expect(mockAlertHumanMessage).not.toHaveBeenCalled();
+  });
+
+  it("still announces when no campaign listens for DMs at all", async () => {
+    mockPrisma.automation.findMany.mockResolvedValue([]);
+    const processor = getProcessor();
+
+    await processor(messageJob("Hallo, sind Sie erreichbar?"));
+
+    expect(mockAlertHumanMessage).toHaveBeenCalled();
   });
 });

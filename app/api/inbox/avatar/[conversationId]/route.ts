@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
 import { getCurrentWorkspaceId } from "@/lib/auth";
+import { isAllowedMimeType } from "@/lib/inbox/media";
 
 /**
  * Serve a contact's profile picture.
@@ -27,7 +28,9 @@ export async function GET(
     select: { data: true, mimeType: true, byteSize: true },
   });
 
-  if (!avatar) {
+  // An avatar is always a picture; anything else stored here is refused rather
+  // than served back from the origin the dashboard session lives on.
+  if (!avatar || !isAllowedMimeType("image", avatar.mimeType)) {
     return NextResponse.json(
       { success: false, error: "Not found" },
       { status: 404 }
@@ -41,6 +44,16 @@ export async function GET(
       // Shorter than an attachment's: a profile picture is replaced when the
       // sync refreshes it, so the browser should come back for it eventually.
       "Cache-Control": "private, max-age=86400",
+      // Layered on purpose; any one of these alone is a single point of
+      // failure for a stored file served from the app's own origin.
+      //   nosniff  — a mislabelled file must not be sniffed into HTML.
+      //   CSP      — even if something got stored as an executable type, it
+      //              may load nothing and run nothing.
+      //   sandbox  — no scripts, no same-origin, so an SVG cannot reach the
+      //              session it would be rendered next to.
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "Content-Disposition": "inline",
     },
   });
 }

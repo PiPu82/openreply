@@ -1318,7 +1318,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
 async function processAttachment(job: Job<ProcessAttachmentJob>): Promise<void> {
   const { mid, url, type } = job.data;
 
-  const media = await fetchMedia(url).catch((error) => {
+  const media = await fetchMedia(url, type).catch((error) => {
     console.error("[attachment] download failed", mid, error);
     return null;
   });

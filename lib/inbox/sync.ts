@@ -153,7 +153,7 @@ async function refreshAvatar(
   if (age < AVATAR_MAX_AGE_MS) return;
 
   try {
-    const media = await fetchMedia(profilePicUrl);
+    const media = await fetchMedia(profilePicUrl, "image");
     if (!media) return;
     await storeAvatar({
       conversationId: thread.id,

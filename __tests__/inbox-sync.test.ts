@@ -15,7 +15,11 @@ const {
   mockGetConversationMessages,
   mockGetContactProfile,
   mockDecryptToken,
+  mockFetchMedia,
+  mockStoreAvatar,
 } = vi.hoisted(() => ({
+  mockFetchMedia: vi.fn(),
+  mockStoreAvatar: vi.fn(),
   mockPrisma: {
     conversation: {
       upsert: vi.fn(),
@@ -39,6 +43,11 @@ vi.mock("@/lib/meta/client", () => ({
   messageDetailText: (m: { message?: string }) => m.message ?? "",
 }));
 vi.mock("@/lib/meta/oauth", () => ({ decryptToken: mockDecryptToken }));
+vi.mock("@/lib/inbox/media", () => ({
+  fetchMedia: mockFetchMedia,
+  storeAvatar: mockStoreAvatar,
+  AVATAR_MAX_AGE_MS: 30 * 24 * 60 * 60 * 1000,
+}));
 
 import { syncAccountConversations } from "../lib/inbox/sync";
 
@@ -56,8 +65,15 @@ beforeEach(() => {
   mockGetConversations.mockResolvedValue([]);
   mockPrisma.conversation.update.mockResolvedValue({});
   mockPrisma.conversation.findMany.mockResolvedValue([
-    { id: "conv_1", contactId: "contact_1", contactUsername: null },
+    {
+      id: "conv_1",
+      workspaceId: "ws_1",
+      contactId: "contact_1",
+      contactUsername: null,
+    },
   ]);
+  mockFetchMedia.mockResolvedValue(null);
+  mockStoreAvatar.mockResolvedValue(undefined);
 });
 
 describe("syncAccountConversations — follow status", () => {
@@ -131,5 +147,74 @@ describe("syncAccountConversations — follow status", () => {
       { contactUsername: null },
     ]);
     expect(where.AND[0].OR[0]).toEqual({ followStatusAt: null });
+  });
+});
+
+describe("syncAccountConversations — profile pictures", () => {
+  /**
+   * Its own pass, because the follow-status pass asks a different question:
+   * that one only looks at threads somebody wrote in, and only once its answer
+   * has gone stale. Gated behind it, avatars reached none of the existing
+   * threads at all — the first run after they shipped fetched exactly zero.
+   */
+  it("fetches and stores the picture Instagram hands over", async () => {
+    mockGetContactProfile.mockResolvedValue({
+      contactFollowsUs: null,
+      weFollowContact: null,
+      username: null,
+      profilePicUrl: "https://cdn/pic.jpg",
+    });
+    mockFetchMedia.mockResolvedValue({
+      data: new Uint8Array([1]),
+      mimeType: "image/jpeg",
+      byteSize: 1,
+    });
+
+    await syncAccountConversations(account);
+
+    expect(mockFetchMedia).toHaveBeenCalledWith("https://cdn/pic.jpg", "image");
+    expect(mockStoreAvatar).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: "conv_1", workspaceId: "ws_1" })
+    );
+  });
+
+  it("stamps the attempt even when there is no picture", async () => {
+    // Otherwise a contact Instagram has none for comes back on every single
+    // run, forever — the sync fires whenever somebody opens the inbox.
+    mockGetContactProfile.mockResolvedValue({
+      contactFollowsUs: null,
+      weFollowContact: null,
+      username: null,
+      profilePicUrl: null,
+    });
+
+    await syncAccountConversations(account);
+
+    expect(mockPrisma.conversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ avatarCheckedAt: expect.any(Date) }),
+      })
+    );
+    expect(mockStoreAvatar).not.toHaveBeenCalled();
+  });
+
+  it("asks only for threads without a recent attempt", async () => {
+    mockGetContactProfile.mockResolvedValue({
+      contactFollowsUs: null,
+      weFollowContact: null,
+      username: null,
+      profilePicUrl: null,
+    });
+
+    await syncAccountConversations(account);
+
+    const avatarQuery = mockPrisma.conversation.findMany.mock.calls
+      .map(([args]) => args)
+      .find((args) => JSON.stringify(args?.where).includes("avatarCheckedAt"));
+
+    expect(avatarQuery).toBeDefined();
+    // Capped like every other lookup here: the local store exists so the inbox
+    // stops spending hundreds of Graph calls an hour.
+    expect(avatarQuery.take).toBeLessThanOrEqual(50);
   });
 });

@@ -427,6 +427,12 @@ model Conversation {
   /// When the two flags above were last fetched. They change over time, and a
   /// stale answer is worse than none.
   followStatusAt     DateTime?
+  /// When a profile picture was last looked for. Separate from
+  /// followStatusAt because the two ask different questions: follow status
+  /// only matters for threads someone wrote in, while a picture is wanted for
+  /// every row in the list. Stamped even when Meta returns none, or a contact
+  /// without one would be retried on every single run.
+  avatarCheckedAt    DateTime?
   lastMessageAt      DateTime?
   lastMessageText    String?
   lastMessageFromMe  Boolean   @default(false)

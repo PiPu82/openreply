@@ -35,6 +35,9 @@ export interface SyncResult {
   messages: number;
   threadsFetched: number;
   followChecks: number;
+  /// Profile pictures looked for this run. Visible in the cron output because
+  /// a first pass over an existing inbox takes several runs to drain.
+  avatarChecks: number;
 }
 
 /** A follow status older than this is refetched; people follow and unfollow. */
@@ -49,6 +52,15 @@ const FOLLOW_STATUS_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
  * single afternoon.
  */
 const FOLLOW_CHECKS_PER_RUN = 15;
+
+/**
+ * How many profile pictures to fetch per run.
+ *
+ * Same call, same budget as a follow check, so the same restraint — a little
+ * higher only because there is a one-off backlog of every existing thread to
+ * work through, and the daily run is the main thing draining it.
+ */
+const AVATAR_FETCHES_PER_RUN = 25;
 
 /**
  * Fill in who follows whom, for threads where it matters.
@@ -85,7 +97,6 @@ async function refreshFollowStatus(
       workspaceId: true,
       contactId: true,
       contactUsername: true,
-      avatar: { select: { fetchedAt: true } },
     },
   });
 
@@ -117,11 +128,8 @@ async function refreshFollowStatus(
       },
     });
 
-    // The profile picture came back on the same call, so taking it costs no
-    // extra rate budget — but the link expires, so the bytes have to come
-    // across now. Spread across runs by the same cap as the follow checks,
-    // which is what keeps a first pass over every thread from arriving as one
-    // burst of downloads.
+    // The picture came back on the same call — free, so take it while it is
+    // here. The pass below is what reaches everyone else.
     await refreshAvatar(thread, status.profilePicUrl);
 
     checked += 1;
@@ -131,26 +139,24 @@ async function refreshFollowStatus(
 }
 
 /**
- * Store a contact's profile picture, if there is one and ours has gone stale.
+ * Store a contact's profile picture, if Instagram gave one.
  *
  * Never throws: an avatar is decoration on a thread that reads fine without
  * one, and a CDN hiccup must not stop the sync that also carries follow status
  * and handles.
  */
 async function refreshAvatar(
-  thread: {
-    id: string;
-    workspaceId: string;
-    avatar: { fetchedAt: Date } | null;
-  },
+  thread: { id: string; workspaceId: string },
   profilePicUrl: string | null
 ): Promise<void> {
-  if (!profilePicUrl) return;
+  // Stamped whether or not there was a picture. Without it, a contact
+  // Instagram has none for comes back on every run, forever.
+  await prisma.conversation.update({
+    where: { id: thread.id },
+    data: { avatarCheckedAt: new Date() },
+  });
 
-  const age = thread.avatar
-    ? Date.now() - thread.avatar.fetchedAt.getTime()
-    : Infinity;
-  if (age < AVATAR_MAX_AGE_MS) return;
+  if (!profilePicUrl) return;
 
   try {
     const media = await fetchMedia(profilePicUrl, "image");
@@ -163,6 +169,45 @@ async function refreshAvatar(
   } catch (error) {
     console.error("[inbox-sync] avatar fetch failed", thread.id, error);
   }
+}
+
+/**
+ * Fetch profile pictures for threads that still have none.
+ *
+ * A pass of its own, because the follow-status pass answers a different
+ * question. That one only looks at threads somebody wrote in, and only once
+ * its answer has gone stale — so it reached none of the 863 rows the inbox
+ * actually draws, and left the list showing initials for weeks.
+ *
+ * One Graph call per contact, capped per run for the same reason every other
+ * lookup here is: the local store exists so the inbox stops spending hundreds
+ * of calls an hour. A backlog therefore drains over several runs rather than
+ * in one burst.
+ */
+async function refreshAvatars(
+  account: { id: string },
+  token: string
+): Promise<number> {
+  const stale = new Date(Date.now() - AVATAR_MAX_AGE_MS);
+
+  const threads = await prisma.conversation.findMany({
+    where: {
+      instagramAccountId: account.id,
+      OR: [{ avatarCheckedAt: null }, { avatarCheckedAt: { lt: stale } }],
+    },
+    // Newest threads first: those are the rows somebody is looking at today.
+    orderBy: { lastMessageAt: "desc" },
+    take: AVATAR_FETCHES_PER_RUN,
+    select: { id: true, workspaceId: true, contactId: true },
+  });
+
+  let fetched = 0;
+  for (const thread of threads) {
+    const profile = await getContactProfile(token, thread.contactId);
+    await refreshAvatar(thread, profile.profilePicUrl);
+    fetched += 1;
+  }
+  return fetched;
 }
 
 /**
@@ -279,8 +324,9 @@ export async function syncAccountConversations(
   }
 
   const followChecks = await refreshFollowStatus(account, token);
+  const avatarChecks = await refreshAvatars(account, token);
 
-  return { conversations, messages, threadsFetched, followChecks };
+  return { conversations, messages, threadsFetched, followChecks, avatarChecks };
 }
 
 /** Reconcile every connected account. */
@@ -303,6 +349,7 @@ export async function syncAllConversations(
     messages: 0,
     threadsFetched: 0,
     followChecks: 0,
+    avatarChecks: 0,
   };
 
   for (const account of accounts) {
@@ -312,6 +359,7 @@ export async function syncAllConversations(
     total.messages += result.messages;
     total.threadsFetched += result.threadsFetched;
     total.followChecks += result.followChecks;
+    total.avatarChecks += result.avatarChecks;
   }
 
   return total;

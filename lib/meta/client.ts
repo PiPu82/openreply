@@ -631,11 +631,44 @@ export interface InstagramMessage {
         title?: string;
         cta?: Array<{ title?: string; url?: string; type?: string }>;
       };
-      image_data?: unknown;
-      video_data?: unknown;
+      image_data?: { url?: string };
+      video_data?: { url?: string };
       file_url?: string;
     }>;
   };
+}
+
+/**
+ * The media file on a message fetched from the Conversations API.
+ *
+ * Worth having next to the webhook's version: the urls here are signed at the
+ * moment of the call, not days earlier. A file whose webhook was missed — or
+ * whose download outlived its link — can still be recovered through this,
+ * where Meta still returns the message at all.
+ *
+ * Only the kinds there is something to render for. A generic_template is one
+ * of our own button DMs, and a shared post belongs to somebody else and dies
+ * with it; both keep their placeholder.
+ */
+export function graphMessageMedia(
+  message: InstagramMessage
+): { type: string; url: string } | null {
+  const attachment = message.attachments?.data?.[0];
+  if (!attachment || attachment.generic_template) return null;
+
+  if (attachment.image_data?.url) {
+    return { type: "image", url: attachment.image_data.url };
+  }
+  if (attachment.video_data?.url) {
+    return { type: "video", url: attachment.video_data.url };
+  }
+  // A voice note arrives here rather than under video_data. The stored type
+  // decides which player the inbox draws, and which content types are allowed,
+  // so it is settled by the caller against what the message already says.
+  if (attachment.file_url) {
+    return { type: "file", url: attachment.file_url };
+  }
+  return null;
 }
 
 /**

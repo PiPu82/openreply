@@ -30,3 +30,19 @@ const PLACEHOLDER_TEXTS = new Set([
 export function isAttachmentPlaceholder(text: string): boolean {
   return PLACEHOLDER_TEXTS.has(text.trim());
 }
+
+/**
+ * The media kind a placeholder stands for — the inverse of the table above.
+ *
+ * A repair needs this because Meta's own hint is not enough: a voice note
+ * comes back under `file_url`, indistinguishable from a document. What the
+ * message already says it was is the better answer, and it decides both the
+ * player the inbox draws and which content types are acceptable.
+ */
+const KIND_BY_PLACEHOLDER = new Map(
+  Object.entries(ATTACHMENT_PLACEHOLDERS).map(([kind, text]) => [text, kind])
+);
+
+export function kindFromPlaceholder(text: string): string | null {
+  return KIND_BY_PLACEHOLDER.get(text.trim()) ?? null;
+}
